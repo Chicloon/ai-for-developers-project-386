@@ -64,7 +64,7 @@ func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
 	// Create user
 	var user models.User
 	err = h.pool.QueryRow(r.Context(),
-		"INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, created_at",
+		"INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
 		req.Email, hash, req.Name).
 		Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err != nil {
@@ -102,7 +102,7 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 	var passwordHash string
 	err := h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name, password_hash, created_at FROM users WHERE email = $1",
+		"SELECT id, email, name, password_hash, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM users WHERE email = $1",
 		req.Email).
 		Scan(&user.ID, &user.Email, &user.Name, &passwordHash, &user.CreatedAt)
 	if err != nil {
@@ -140,7 +140,7 @@ func (h *authHandler) me(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err := h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name, created_at FROM users WHERE id = $1",
+		"SELECT id, email, name, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM users WHERE id = $1",
 		userID).
 		Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err != nil {
