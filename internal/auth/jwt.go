@@ -2,12 +2,25 @@ package auth
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte("your-secret-key-change-in-production")
+var jwtSecret []byte
+
+func init() {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		// Use a default for development only
+		secret = "dev-secret-key-minimum-32-characters-long"
+	}
+	if len(secret) < 32 {
+		panic("JWT_SECRET must be at least 32 characters for security")
+	}
+	jwtSecret = []byte(secret)
+}
 
 // Claims represents JWT claims
 type Claims struct {
