@@ -46,7 +46,7 @@ func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
 		"SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)",
 		req.Email).Scan(&exists)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
+		jsonError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	if exists {
@@ -68,7 +68,7 @@ func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
 		req.Email, hash, req.Name).
 		Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
+		jsonError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
@@ -102,15 +102,17 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 	var passwordHash string
 	err := h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name, password_hash FROM users WHERE email = $1",
+		"SELECT id, email, name, password_hash, created_at FROM users WHERE email = $1",
 		req.Email).
-		Scan(&user.ID, &user.Email, &user.Name, &passwordHash)
+		Scan(&user.ID, &user.Email, &user.Name, &passwordHash, &user.CreatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
+			// Run dummy bcrypt to prevent timing attacks
+			auth.CheckPassword("dummy", "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
 			jsonError(w, http.StatusUnauthorized, "invalid email or password")
 			return
 		}
-		jsonError(w, http.StatusInternalServerError, err.Error())
+		jsonError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
