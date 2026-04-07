@@ -1,0 +1,27 @@
+FROM node:20-alpine AS builder
+# Must match Docker Compose service name so Next rewrites reach the API container
+ARG API_PROXY_URL=http://api:8080
+ENV API_PROXY_URL=$API_PROXY_URL
+WORKDIR /app
+COPY web/package*.json web/
+RUN cd web && npm install
+COPY web/ web/
+# Bust stale BuildKit/GHA cache so `next build` always matches current source
+ARG BUILD_SHA=local
+RUN echo "BUILD_SHA=${BUILD_SHA}" && cd web && npm run build
+
+FROM node:20-alpine
+ARG API_PROXY_URL=http://api:8080
+ENV API_PROXY_URL=$API_PROXY_URL
+WORKDIR /app
+COPY --from=builder /app/web/package*.json web/
+COPY --from=builder /app/web/node_modules web/node_modules
+COPY --from=builder /app/web/.next web/.next
+COPY --from=builder /app/web/next.config.ts web/
+COPY web/package.json web/
+
+ENV NODE_ENV=production
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "cd web && npm run start"]

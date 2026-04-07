@@ -1,0 +1,6 @@
+# Avoid baking local dev API URL into Next.js build
+web/.env.local
+web/.env*.local
+
+.git
+.github

@@ -1,0 +1,21 @@
+# MacOS
+.DS_Store
+
+# Dependency directories
+node_modules/
+
+# Next.js
+.next/
+
+# TypeSpec
+tsp-output/
+
+# Go
+*.exe
+*.test
+vendor/
+
+# Environment
+.env
+web/.env.local
+web/.env*.local

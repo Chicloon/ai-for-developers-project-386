@@ -1,0 +1,368 @@
+openapi: 3.0.0
+info:
+  title: Call Booking API
+  version: 0.0.0
+tags: []
+paths:
+  /api/availability-rules:
+    get:
+      operationId: AvailabilityRules_list
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/AvailabilityRule'
+                  - $ref: '#/components/schemas/ErrorResponse'
+    post:
+      operationId: AvailabilityRules_create
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityRule'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAvailabilityRule'
+  /api/availability-rules/{id}:
+    put:
+      operationId: AvailabilityRules_update
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/AvailabilityRule'
+                  - $ref: '#/components/schemas/ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAvailabilityRule'
+    delete:
+      operationId: AvailabilityRules_delete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+  /api/blocked-days:
+    post:
+      operationId: BlockedDays_create
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockedDay'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBlockedDay'
+  /api/blocked-days/{id}:
+    delete:
+      operationId: BlockedDays_delete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+  /api/bookings:
+    post:
+      operationId: Bookings_create
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBooking'
+    get:
+      operationId: Bookings_list
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/Booking'
+                  - $ref: '#/components/schemas/ErrorResponse'
+  /api/bookings/{id}:
+    delete:
+      operationId: Bookings_delete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '204':
+          description: 'There is no content to send for this request, but the headers may be useful. '
+  /api/slots:
+    get:
+      operationId: Slots_list
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/Slot'
+                  - $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    AvailabilityRule:
+      type: object
+      required:
+        - id
+        - type
+        - timeRanges
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - recurring
+            - one-time
+        dayOfWeek:
+          type: integer
+          format: int32
+        date:
+          type: string
+        timeRanges:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeRange'
+    BlockedDay:
+      type: object
+      required:
+        - id
+        - date
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+    Booking:
+      type: object
+      required:
+        - id
+        - slotDate
+        - slotStartTime
+        - name
+        - email
+        - status
+      properties:
+        id:
+          type: string
+        slotDate:
+          type: string
+        slotStartTime:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - cancelled
+        recurrence:
+          type: string
+          enum:
+            - none
+            - daily
+            - weekly
+            - yearly
+        dayOfWeek:
+          type: integer
+          format: int32
+        endDate:
+          type: string
+    CreateAvailabilityRule:
+      type: object
+      required:
+        - type
+        - timeRanges
+      properties:
+        type:
+          type: string
+          enum:
+            - recurring
+            - one-time
+        dayOfWeek:
+          type: integer
+          format: int32
+        date:
+          type: string
+        timeRanges:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeRange'
+    CreateBlockedDay:
+      type: object
+      required:
+        - date
+      properties:
+        date:
+          type: string
+    CreateBooking:
+      type: object
+      required:
+        - slotDate
+        - slotStartTime
+        - name
+        - email
+      properties:
+        slotDate:
+          type: string
+        slotStartTime:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        recurrence:
+          type: string
+          enum:
+            - none
+            - daily
+            - weekly
+            - yearly
+        dayOfWeek:
+          type: integer
+          format: int32
+        endDate:
+          type: string
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+    Slot:
+      type: object
+      required:
+        - id
+        - date
+        - startTime
+        - endTime
+        - isBooked
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+        startTime:
+          type: string
+        endTime:
+          type: string
+        isBooked:
+          type: boolean
+    TimeRange:
+      type: object
+      required:
+        - startTime
+        - endTime
+      properties:
+        startTime:
+          type: string
+        endTime:
+          type: string
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+    variables: {}
