@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -62,5 +63,5 @@ func GetUserEmail(ctx context.Context) string {
 func jsonError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write([]byte(`{"error":"` + msg + `"}`))
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
