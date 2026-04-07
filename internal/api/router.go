@@ -9,6 +9,8 @@ import (
 
 func NewRouter(pool *pgxpool.Pool) *chi.Mux {
 	r := chi.NewRouter()
+
+	// Global middleware
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
@@ -20,12 +22,15 @@ func NewRouter(pool *pgxpool.Pool) *chi.Mux {
 		MaxAge:           300,
 	}))
 
+	// Public routes (no JWT required)
+	r.Mount("/api/auth", authRouter(pool))
+
+	// Protected routes (JWT required)
 	r.Route("/api", func(r chi.Router) {
-		r.Mount("/availability-rules", availabilityRulesRouter(pool))
-		r.Mount("/blocked-days", blockedDaysRouter(pool))
-		r.Mount("/slots", slotsRouter(pool))
-		r.Mount("/bookings", bookingsRouter(pool))
-		r.Mount("/groups", groupsRouter(pool))
+		r.Mount("/users", usersRouter(pool))
+		r.Mount("/my/schedules", schedulesRouter(pool))
+		r.Mount("/my/groups", groupsRouter(pool))
+		r.Mount("/my/bookings", bookingsRouter(pool))
 	})
 
 	return r
