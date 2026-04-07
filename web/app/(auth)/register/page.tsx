@@ -32,16 +32,39 @@ export default function RegisterPage() {
   };
 
   return (
-    <Paper p="xl" maw={400} mx="auto" mt={100} withBorder>
-      <Title order={2} mb="lg" ta="center">Регистрация</Title>
-      <form onSubmit={handleSubmit}>
+    <Paper p="xl" maw={400} mx="auto" mt={100} withBorder data-testid="register-page">
+      <Title order={2} mb="lg" ta="center" data-testid="register-title">Регистрация</Title>
+      <form onSubmit={handleSubmit} data-testid="register-form">
         <Stack>
-          <TextInput label="Имя" value={name} onChange={(e) => setName(e.target.value)} required />
-          <TextInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <PasswordInput label="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          {error && <Text c="red" size="sm">{error}</Text>}
-          <Button type="submit" loading={loading} fullWidth>Зарегистрироваться</Button>
-          <Text ta="center" size="sm">Уже есть аккаунт? <Anchor href="/login">Войти</Anchor></Text>
+          <TextInput 
+            label="Имя" 
+            value={name} 
+            onChange={(e) => setName(e.target.value)} 
+            required 
+            data-testid="register-name-input"
+          />
+          <TextInput 
+            label="Email" 
+            type="email" 
+            value={email} 
+            onChange={(e) => setEmail(e.target.value)} 
+            required 
+            data-testid="register-email-input"
+          />
+          <PasswordInput 
+            label="Пароль" 
+            value={password} 
+            onChange={(e) => setPassword(e.target.value)} 
+            required 
+            data-testid="register-password-input"
+          />
+          {error && <Text c="red" size="sm" data-testid="register-error">{error}</Text>}
+          <Button type="submit" loading={loading} fullWidth data-testid="register-submit-button">
+            Зарегистрироваться
+          </Button>
+          <Text ta="center" size="sm">
+            Уже есть аккаунт? <Anchor href="/login" data-testid="register-login-link">Войти</Anchor>
+          </Text>
         </Stack>
       </form>
     </Paper>

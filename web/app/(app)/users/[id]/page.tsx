@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Paper, Title, Stack, Card, Group, Text, Button, Loader, Center, Alert } from "@mantine/core";
+import {
+  Paper,
+  Title,
+  Stack,
+  Card,
+  Group,
+  Text,
+  Button,
+  Loader,
+  Center,
+  Alert,
+} from "@mantine/core";
 import { DatePickerInput } from "@mantine/dates";
 import { User, Slot, getUser, getUserSlots, createBooking } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -50,7 +61,7 @@ export default function UserProfilePage() {
       setSlotsLoading(true);
       const dateStr = selectedDate.toISOString().split("T")[0];
       const data = await getUserSlots(userId, dateStr);
-      setSlots(data);
+      setSlots(data.slots);
     } catch (e) {
       console.error(e);
     } finally {
@@ -65,10 +76,12 @@ export default function UserProfilePage() {
       setError(null);
       setSuccess(null);
 
+      // Extract schedule ID from slot ID (format: "scheduleId_startTime")
+      const scheduleId = slot.id.split("_")[0];
+
       await createBooking({
-        slotDate: slot.date,
-        slotStartTime: slot.startTime,
         ownerId: userId,
+        scheduleId: scheduleId,
       });
 
       setSuccess("Запись успешно создана!");
@@ -104,7 +117,9 @@ export default function UserProfilePage() {
       <Title order={2}>Профиль пользователя</Title>
 
       <Card withBorder>
-        <Text fw={500} size="lg">{user.name}</Text>
+        <Text fw={500} size="lg">
+          {user.name}
+        </Text>
         <Text c="dimmed">{user.email}</Text>
       </Card>
 

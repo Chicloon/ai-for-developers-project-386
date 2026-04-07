@@ -15,14 +15,17 @@ import {
   Group,
   ActionIcon,
   Badge,
+  Select,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconTrash, IconUserPlus } from "@tabler/icons-react";
+import { IconTrash, IconUserPlus, IconEdit } from "@tabler/icons-react";
 import {
-  Group as GroupType,
-  User,
+  VisibilityGroup,
+  GroupMember,
+  CreateGroupRequest,
   getMyGroups,
   createGroup,
+  updateGroup,
   deleteGroup,
   getGroupMembers,
   addGroupMember,
@@ -30,18 +33,27 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 
+const VISIBILITY_LEVELS = [
+  { value: "family", label: "Семья" },
+  { value: "work", label: "Работа" },
+  { value: "friends", label: "Друзья" },
+  { value: "public", label: "Публичная" },
+];
+
 export default function MyGroupsPage() {
   const { user: currentUser } = useAuth();
-  const [groups, setGroups] = useState<GroupType[]>([]);
-  const [groupMembers, setGroupMembers] = useState<Record<string, User[]>>({});
+  const [groups, setGroups] = useState<VisibilityGroup[]>([]);
+  const [groupMembers, setGroupMembers] = useState<Record<string, GroupMember[]>>({});
   const [loading, setLoading] = useState(true);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+  const [editOpened, { open: openEdit, close: closeEdit }] = useDisclosure(false);
   const [addMemberOpened, { open: openAddMember, close: closeAddMember }] = useDisclosure(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   // Form state
   const [groupName, setGroupName] = useState("");
+  const [visibilityLevel, setVisibilityLevel] = useState<string | null>("public");
   const [memberEmail, setMemberEmail] = useState("");
 
   useEffect(() => {
@@ -52,14 +64,14 @@ export default function MyGroupsPage() {
     try {
       setLoading(true);
       const data = await getMyGroups();
-      setGroups(data);
+      setGroups(data.groups);
 
       // Load members for each group
-      const membersMap: Record<string, User[]> = {};
-      for (const group of data) {
+      const membersMap: Record<string, GroupMember[]> = {};
+      for (const group of data.groups) {
         try {
-          const members = await getGroupMembers(group.id);
-          membersMap[group.id] = members;
+          const membersData = await getGroupMembers(group.id);
+          membersMap[group.id] = membersData.members;
         } catch (e) {
           console.error(e);
         }
@@ -72,13 +84,54 @@ export default function MyGroupsPage() {
     }
   };
 
+  const resetForm = () => {
+    setGroupName("");
+    setVisibilityLevel("public");
+    setSelectedGroupId(null);
+  };
+
+  const handleOpenCreate = () => {
+    resetForm();
+    openCreate();
+  };
+
+  const handleOpenEdit = (group: VisibilityGroup) => {
+    setSelectedGroupId(group.id);
+    setGroupName(group.name);
+    setVisibilityLevel(group.visibilityLevel);
+    openEdit();
+  };
+
   const handleCreateGroup = async () => {
-    if (!groupName.trim()) return;
+    if (!groupName.trim() || !visibilityLevel) return;
     try {
       setSubmitting(true);
-      await createGroup({ name: groupName.trim() });
+      const data: CreateGroupRequest = {
+        name: groupName.trim(),
+        visibilityLevel: visibilityLevel as "family" | "work" | "friends" | "public",
+      };
+      await createGroup(data);
       closeCreate();
-      setGroupName("");
+      resetForm();
+      await loadGroups();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateGroup = async () => {
+    if (!selectedGroupId || !groupName.trim() || !visibilityLevel) return;
+    try {
+      setSubmitting(true);
+      const data: CreateGroupRequest = {
+        name: groupName.trim(),
+        visibilityLevel: visibilityLevel as "family" | "work" | "friends" | "public",
+      };
+      await updateGroup(selectedGroupId, data);
+      closeEdit();
+      resetForm();
       await loadGroups();
     } catch (e) {
       console.error(e);
@@ -100,7 +153,7 @@ export default function MyGroupsPage() {
     if (!selectedGroupId || !memberEmail.trim()) return;
     try {
       setSubmitting(true);
-      await addGroupMember(selectedGroupId, memberEmail.trim());
+      await addGroupMember(selectedGroupId, { email: memberEmail.trim() });
       closeAddMember();
       setMemberEmail("");
       setSelectedGroupId(null);
@@ -112,9 +165,9 @@ export default function MyGroupsPage() {
     }
   };
 
-  const handleRemoveMember = async (groupId: string, userId: string) => {
+  const handleRemoveMember = async (groupId: string, memberId: string) => {
     try {
-      await removeGroupMember(groupId, userId);
+      await removeGroupMember(groupId, memberId);
       await loadGroups();
     } catch (e) {
       console.error(e);
@@ -123,6 +176,7 @@ export default function MyGroupsPage() {
 
   const openAddMemberModal = (groupId: string) => {
     setSelectedGroupId(groupId);
+    setMemberEmail("");
     openAddMember();
   };
 
@@ -138,7 +192,7 @@ export default function MyGroupsPage() {
     <Stack gap="md">
       <Group justify="space-between">
         <Title order={2}>Мои группы</Title>
-        <Button onClick={openCreate}>Создать группу</Button>
+        <Button onClick={handleOpenCreate}>Создать группу</Button>
       </Group>
 
       {groups.length === 0 ? (
@@ -148,12 +202,20 @@ export default function MyGroupsPage() {
           {groups.map((group) => {
             const members = groupMembers[group.id] || [];
             const isOwner = group.ownerId === currentUser?.id;
+            const visibilityLabel = VISIBILITY_LEVELS.find(
+              (v) => v.value === group.visibilityLevel
+            )?.label;
 
             return (
               <Accordion.Item key={group.id} value={group.id}>
                 <Accordion.Control>
                   <Group justify="space-between">
-                    <Text fw={500}>{group.name}</Text>
+                    <Group gap="xs">
+                      <Text fw={500}>{group.name}</Text>
+                      <Badge color="blue" variant="light">
+                        {visibilityLabel}
+                      </Badge>
+                    </Group>
                     {isOwner && <Badge color="blue">Владелец</Badge>}
                   </Group>
                 </Accordion.Control>
@@ -169,13 +231,13 @@ export default function MyGroupsPage() {
                           <Group justify="space-between">
                             <div>
                               <Text size="sm" fw={500}>
-                                {member.name}
+                                {member.member.name}
                               </Text>
                               <Text size="xs" c="dimmed">
-                                {member.email}
+                                {member.member.email}
                               </Text>
                             </div>
-                            {isOwner && member.id !== currentUser?.id && (
+                            {isOwner && member.member.id !== currentUser?.id && (
                               <ActionIcon
                                 color="red"
                                 size="sm"
@@ -201,12 +263,20 @@ export default function MyGroupsPage() {
                         >
                           Добавить участника
                         </Button>
-                        <ActionIcon
-                          color="red"
-                          onClick={() => handleDeleteGroup(group.id)}
-                        >
-                          <IconTrash size={16} />
-                        </ActionIcon>
+                        <Group gap="xs">
+                          <ActionIcon
+                            color="blue"
+                            onClick={() => handleOpenEdit(group)}
+                          >
+                            <IconEdit size={16} />
+                          </ActionIcon>
+                          <ActionIcon
+                            color="red"
+                            onClick={() => handleDeleteGroup(group.id)}
+                          >
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        </Group>
                       </Group>
                     )}
                   </Stack>
@@ -218,17 +288,19 @@ export default function MyGroupsPage() {
       )}
 
       {/* Create Group Modal */}
-      <Modal
-        opened={createOpened}
-        onClose={closeCreate}
-        title="Создать группу"
-      >
+      <Modal opened={createOpened} onClose={closeCreate} title="Создать группу">
         <Stack gap="md">
           <TextInput
             label="Название группы"
             placeholder="Введите название"
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
+          />
+          <Select
+            label="Уровень видимости"
+            value={visibilityLevel}
+            onChange={setVisibilityLevel}
+            data={VISIBILITY_LEVELS}
           />
           <Group justify="flex-end">
             <Button variant="default" onClick={closeCreate}>
@@ -237,9 +309,39 @@ export default function MyGroupsPage() {
             <Button
               onClick={handleCreateGroup}
               loading={submitting}
-              disabled={!groupName.trim()}
+              disabled={!groupName.trim() || !visibilityLevel}
             >
               Создать
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Edit Group Modal */}
+      <Modal opened={editOpened} onClose={closeEdit} title="Редактировать группу">
+        <Stack gap="md">
+          <TextInput
+            label="Название группы"
+            placeholder="Введите название"
+            value={groupName}
+            onChange={(e) => setGroupName(e.target.value)}
+          />
+          <Select
+            label="Уровень видимости"
+            value={visibilityLevel}
+            onChange={setVisibilityLevel}
+            data={VISIBILITY_LEVELS}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={closeEdit}>
+              Отмена
+            </Button>
+            <Button
+              onClick={handleUpdateGroup}
+              loading={submitting}
+              disabled={!groupName.trim() || !visibilityLevel}
+            >
+              Сохранить
             </Button>
           </Group>
         </Stack>

@@ -14,11 +14,7 @@ import {
   Badge,
   Tabs,
 } from "@mantine/core";
-import {
-  Booking,
-  getMyBookings,
-  cancelBooking,
-} from "@/lib/api";
+import { Booking, getMyBookings, cancelBooking } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 function formatDate(dateStr: string): string {
@@ -33,10 +29,8 @@ function formatDate(dateStr: string): string {
 
 function getStatusColor(status: string): string {
   switch (status) {
-    case "confirmed":
+    case "active":
       return "green";
-    case "pending":
-      return "yellow";
     case "cancelled":
       return "red";
     default:
@@ -46,10 +40,8 @@ function getStatusColor(status: string): string {
 
 function getStatusLabel(status: string): string {
   switch (status) {
-    case "confirmed":
-      return "Подтверждено";
-    case "pending":
-      return "Ожидание";
+    case "active":
+      return "Активно";
     case "cancelled":
       return "Отменено";
     default:
@@ -64,33 +56,26 @@ interface BookingCardProps {
 }
 
 function BookingCard({ booking, showCancel, onCancel }: BookingCardProps) {
+  const isIncoming = new Date(booking.date) >= new Date();
+
   return (
     <Card withBorder>
       <Group justify="space-between" align="flex-start">
         <Stack gap="xs">
           <Text fw={500}>
-            {formatDate(booking.slotDate)} в {booking.slotStartTime}
+            {formatDate(booking.date)} в {booking.startTime} - {booking.endTime}
           </Text>
           <Group gap="xs">
             <Badge color={getStatusColor(booking.status)}>
               {getStatusLabel(booking.status)}
             </Badge>
-            {booking.recurrence && (
-              <Badge variant="light" color="blue">
-                Повторяется
-              </Badge>
-            )}
           </Group>
-          {booking.name && (
-            <Text size="sm" c="dimmed">
-              Имя: {booking.name}
-            </Text>
-          )}
-          {booking.email && (
-            <Text size="sm" c="dimmed">
-              Email: {booking.email}
-            </Text>
-          )}
+          <Text size="sm" c="dimmed">
+            Клиент: {booking.booker.name} ({booking.booker.email})
+          </Text>
+          <Text size="sm" c="dimmed">
+            Владелец: {booking.owner.name} ({booking.owner.email})
+          </Text>
         </Stack>
         {showCancel && booking.status !== "cancelled" && onCancel && (
           <Button
@@ -122,7 +107,7 @@ export default function MyBookingsPage() {
     try {
       setLoading(true);
       const data = await getMyBookings();
-      setBookings(data);
+      setBookings(data.bookings);
     } catch (e) {
       console.error(e);
     } finally {
@@ -152,24 +137,25 @@ export default function MyBookingsPage() {
 
   // Filter bookings based on active tab
   const incomingBookings = bookings.filter(
-    (b) => b.status !== "cancelled" && new Date(b.slotDate) >= new Date()
+    (b) => b.status !== "cancelled" && new Date(b.date) >= new Date()
   );
   const pastBookings = bookings.filter(
-    (b) => b.status === "cancelled" || new Date(b.slotDate) < new Date()
+    (b) => b.status === "cancelled" || new Date(b.date) < new Date()
   );
 
   return (
     <Stack gap="md">
       <Title order={2}>Мои бронирования</Title>
 
-      <Tabs value={activeTab} onChange={(value) => setActiveTab(value || "incoming")}>
+      <Tabs
+        value={activeTab}
+        onChange={(value) => setActiveTab(value || "incoming")}
+      >
         <Tabs.List>
           <Tabs.Tab value="incoming">
             Предстоящие ({incomingBookings.length})
           </Tabs.Tab>
-          <Tabs.Tab value="past">
-            История ({pastBookings.length})
-          </Tabs.Tab>
+          <Tabs.Tab value="past">История ({pastBookings.length})</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="incoming" pt="md">
@@ -181,7 +167,7 @@ export default function MyBookingsPage() {
                 <BookingCard
                   key={booking.id}
                   booking={booking}
-                  showCancel={booking.bookerId === user?.id}
+                  showCancel={booking.booker.id === user?.id}
                   onCancel={handleCancel}
                 />
               ))}
@@ -195,11 +181,7 @@ export default function MyBookingsPage() {
           ) : (
             <Stack gap="md">
               {pastBookings.map((booking) => (
-                <BookingCard
-                  key={booking.id}
-                  booking={booking}
-                  showCancel={false}
-                />
+                <BookingCard key={booking.id} booking={booking} showCancel={false} />
               ))}
             </Stack>
           )}

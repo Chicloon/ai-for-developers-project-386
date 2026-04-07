@@ -18,7 +18,7 @@ export default function UsersPage() {
     try {
       setLoading(true);
       const data = await getUsers();
-      setUsers(data);
+      setUsers(data.users);
     } catch (e) {
       console.error(e);
     } finally {
@@ -28,26 +28,32 @@ export default function UsersPage() {
 
   if (loading) {
     return (
-      <Center h="50vh">
+      <Center h="50vh" data-testid="users-loading">
         <Loader />
       </Center>
     );
   }
 
   return (
-    <Stack gap="md">
-      <Title order={2}>Каталог пользователей</Title>
+    <Stack gap="md" data-testid="users-page">
+      <Title order={2} data-testid="users-title">Каталог пользователей</Title>
       {users.length === 0 ? (
-        <Text c="dimmed">Пока нет доступных пользователей</Text>
+        <Text c="dimmed" data-testid="users-empty">Пока нет доступных пользователей</Text>
       ) : (
         users.map((user) => (
-          <Card key={user.id} withBorder>
+          <Card key={user.id} withBorder data-testid={`user-card-${user.id}`}>
             <Group justify="space-between">
               <div>
-                <Text fw={500}>{user.name}</Text>
-                <Text size="sm" c="dimmed">{user.email}</Text>
+                <Text fw={500} data-testid={`user-name-${user.id}`}>{user.name}</Text>
+                <Text size="sm" c="dimmed" data-testid={`user-email-${user.id}`}>{user.email}</Text>
               </div>
-              <Button onClick={() => router.push(`/users/${user.id}`)} variant="light">Записаться</Button>
+              <Button 
+                onClick={() => router.push(`/users/${user.id}`)} 
+                variant="light"
+                data-testid={`user-book-button-${user.id}`}
+              >
+                Записаться
+              </Button>
             </Group>
           </Card>
         ))

@@ -31,15 +31,32 @@ export default function LoginPage() {
   };
 
   return (
-    <Paper p="xl" maw={400} mx="auto" mt={100} withBorder>
-      <Title order={2} mb="lg" ta="center">Вход</Title>
-      <form onSubmit={handleSubmit}>
+    <Paper p="xl" maw={400} mx="auto" mt={100} withBorder data-testid="login-page">
+      <Title order={2} mb="lg" ta="center" data-testid="login-title">Вход</Title>
+      <form onSubmit={handleSubmit} data-testid="login-form">
         <Stack>
-          <TextInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <PasswordInput label="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          {error && <Text c="red" size="sm">{error}</Text>}
-          <Button type="submit" loading={loading} fullWidth>Войти</Button>
-          <Text ta="center" size="sm">Нет аккаунта? <Anchor href="/register">Зарегистрироваться</Anchor></Text>
+          <TextInput 
+            label="Email" 
+            type="email" 
+            value={email} 
+            onChange={(e) => setEmail(e.target.value)} 
+            required 
+            data-testid="login-email-input"
+          />
+          <PasswordInput 
+            label="Пароль" 
+            value={password} 
+            onChange={(e) => setPassword(e.target.value)} 
+            required 
+            data-testid="login-password-input"
+          />
+          {error && <Text c="red" size="sm" data-testid="login-error">{error}</Text>}
+          <Button type="submit" loading={loading} fullWidth data-testid="login-submit-button">
+            Войти
+          </Button>
+          <Text ta="center" size="sm">
+            Нет аккаунта? <Anchor href="/register" data-testid="login-register-link">Зарегистрироваться</Anchor>
+          </Text>
         </Stack>
       </form>
     </Paper>

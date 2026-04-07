@@ -81,16 +81,26 @@ func (h *schedulesHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Format time to PostgreSQL TIME format (HH:MM:SS)
+	startTime := req.StartTime
+	if len(startTime) == 5 {
+		startTime = startTime + ":00"
+	}
+	endTime := req.EndTime
+	if len(endTime) == 5 {
+		endTime = endTime + ":00"
+	}
+
 	var s models.Schedule
 	var dayOfWeek *int32
 	var date *string
 
 	err := h.pool.QueryRow(r.Context(),
 		"INSERT INTO schedules (user_id, type, day_of_week, date, start_time, end_time, is_blocked) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, type, day_of_week, date, start_time, end_time, is_blocked, created_at",
-		userID, req.Type, req.DayOfWeek, req.Date, req.StartTime, req.EndTime, req.IsBlocked).
+		userID, req.Type, req.DayOfWeek, req.Date, startTime, endTime, req.IsBlocked).
 		Scan(&s.ID, &s.UserID, &s.Type, &dayOfWeek, &date, &s.StartTime, &s.EndTime, &s.IsBlocked, &s.CreatedAt)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "database error")
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 
@@ -110,20 +120,30 @@ func (h *schedulesHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Format time to PostgreSQL TIME format (HH:MM:SS)
+	startTime := req.StartTime
+	if len(startTime) == 5 {
+		startTime = startTime + ":00"
+	}
+	endTime := req.EndTime
+	if len(endTime) == 5 {
+		endTime = endTime + ":00"
+	}
+
 	var s models.Schedule
 	var dayOfWeek *int32
 	var date *string
 
 	err := h.pool.QueryRow(r.Context(),
 		"UPDATE schedules SET type=$1, day_of_week=$2, date=$3, start_time=$4, end_time=$5, is_blocked=$6 WHERE id=$7 AND user_id=$8 RETURNING id, user_id, type, day_of_week, date, start_time, end_time, is_blocked, created_at",
-		req.Type, req.DayOfWeek, req.Date, req.StartTime, req.EndTime, req.IsBlocked, scheduleID, userID).
+		req.Type, req.DayOfWeek, req.Date, startTime, endTime, req.IsBlocked, scheduleID, userID).
 		Scan(&s.ID, &s.UserID, &s.Type, &dayOfWeek, &date, &s.StartTime, &s.EndTime, &s.IsBlocked, &s.CreatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			jsonError(w, http.StatusNotFound, "schedule not found")
 			return
 		}
-		jsonError(w, http.StatusInternalServerError, "database error")
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 
