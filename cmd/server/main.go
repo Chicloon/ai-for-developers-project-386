@@ -12,9 +12,16 @@ import (
 
 	"call-booking/internal/api"
 	"call-booking/internal/db"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: .env file not found, using system environment variables")
+	}
+
 	ctx := context.Background()
 
 	pool, err := db.NewPool(ctx)
