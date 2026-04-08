@@ -43,3 +43,17 @@ export function getNextWeek(): string {
   nextWeek.setDate(nextWeek.getDate() + 7)
   return formatDate(nextWeek)
 }
+
+export function generateGroupName(): string {
+  const timestamp = Date.now()
+  return `Test Group ${timestamp}`
+}
+
+export type VisibilityLevel = 'family' | 'work' | 'friends' | 'public'
+
+export const visibilityLevelLabels: Record<VisibilityLevel, string> = {
+  family: 'Семья',
+  work: 'Работа',
+  friends: 'Друзья',
+  public: 'Публичная'
+}

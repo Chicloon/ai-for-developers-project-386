@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // ErrorResponse represents an error response
 type ErrorResponse struct {
 	Error string `json:"error"`
@@ -7,12 +9,12 @@ type ErrorResponse struct {
 
 // User represents a registered user
 type User struct {
-	ID           string `json:"id"`
-	Email        string `json:"email"`
-	Name         string `json:"name"`
-	PasswordHash string `json:"-"` // never expose in JSON
-	CreatedAt    string `json:"createdAt,omitempty"`
-	UpdatedAt    string `json:"updatedAt,omitempty"`
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	Name         string    `json:"name"`
+	PasswordHash string    `json:"-"` // never expose in JSON
+	CreatedAt    time.Time `json:"createdAt,omitempty"`
+	UpdatedAt    time.Time `json:"updatedAt,omitempty"`
 }
 
 // AuthRequest for login/register
@@ -35,15 +37,15 @@ type AuthResponse struct {
 
 // Schedule represents user's availability (replaces AvailabilityRule)
 type Schedule struct {
-	ID        string  `json:"id"`
-	UserID    string  `json:"userId"`
-	Type      string  `json:"type"`
-	DayOfWeek *int32  `json:"dayOfWeek,omitempty"`
-	Date      *string `json:"date,omitempty"`
-	StartTime string  `json:"startTime"`
-	EndTime   string  `json:"endTime"`
-	IsBlocked bool    `json:"isBlocked"`
-	CreatedAt string  `json:"createdAt,omitempty"`
+	ID        string    `json:"id"`
+	UserID    string    `json:"userId"`
+	Type      string    `json:"type"`
+	DayOfWeek *int32    `json:"dayOfWeek,omitempty"`
+	Date      *string   `json:"date,omitempty"`
+	StartTime string    `json:"startTime"`
+	EndTime   string    `json:"endTime"`
+	IsBlocked bool      `json:"isBlocked"`
+	CreatedAt time.Time `json:"createdAt,omitempty"`
 }
 
 type CreateScheduleRequest struct {
@@ -57,11 +59,11 @@ type CreateScheduleRequest struct {
 
 // VisibilityGroup for access control
 type VisibilityGroup struct {
-	ID              string `json:"id"`
-	OwnerID         string `json:"ownerId"`
-	Name            string `json:"name"`
-	VisibilityLevel string `json:"visibilityLevel"`
-	CreatedAt       string `json:"createdAt,omitempty"`
+	ID              string    `json:"id"`
+	OwnerID         string    `json:"ownerId"`
+	Name            string    `json:"name"`
+	VisibilityLevel string    `json:"visibilityLevel"`
+	CreatedAt       time.Time `json:"createdAt,omitempty"`
 }
 
 type CreateGroupRequest struct {
@@ -76,30 +78,31 @@ type AddMemberRequest struct {
 
 // GroupMember with user info
 type GroupMember struct {
-	ID      string `json:"id"`
-	GroupID string `json:"groupId"`
-	Member  User   `json:"member"`
-	AddedBy string `json:"addedBy"`
-	AddedAt string `json:"addedAt"`
+	ID      string    `json:"id"`
+	GroupID string    `json:"groupId"`
+	Member  User      `json:"member"`
+	AddedBy string    `json:"addedBy"`
+	AddedAt time.Time `json:"addedAt"`
 }
 
 // Booking with user info
 type Booking struct {
-	ID          string  `json:"id"`
-	ScheduleID  string  `json:"scheduleId"`
-	Booker      User    `json:"booker"`
-	Owner       User    `json:"owner"`
-	Date        string  `json:"date"`
-	StartTime   string  `json:"startTime"`
-	EndTime     string  `json:"endTime"`
-	Status      string  `json:"status"`
-	CreatedAt   string  `json:"createdAt,omitempty"`
-	CancelledAt *string `json:"cancelledAt,omitempty"`
+	ID          string     `json:"id"`
+	ScheduleID  string     `json:"scheduleId"`
+	Booker      User       `json:"booker"`
+	Owner       User       `json:"owner"`
+	Date        string     `json:"date"`
+	StartTime   string     `json:"startTime"`
+	EndTime     string     `json:"endTime"`
+	Status      string     `json:"status"`
+	CreatedAt   time.Time  `json:"createdAt,omitempty"`
+	CancelledAt *time.Time `json:"cancelledAt,omitempty"`
 }
 
 type CreateBookingRequest struct {
-	OwnerID    string `json:"ownerId"`
-	ScheduleID string `json:"scheduleId"`
+	OwnerID       string `json:"ownerId"`
+	ScheduleID    string `json:"scheduleId"`
+	SlotStartTime string `json:"slotStartTime"` // Time of the specific 30-min slot (e.g., "09:00")
 }
 
 // CreateBooking for legacy compatibility (test support)

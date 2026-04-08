@@ -16,15 +16,16 @@ import {
 } from "@mantine/core";
 import { Booking, getMyBookings, cancelBooking } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
+import dayjs from "dayjs";
+import "dayjs/locale/ru";
+
+dayjs.locale("ru");
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("ru-RU", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  if (!dateStr) return "Регулярное расписание";
+  const date = dayjs(dateStr);
+  if (!date.isValid()) return "Некорректная дата";
+  return date.format("dddd, D MMMM YYYY");
 }
 
 function getStatusColor(status: string): string {
@@ -56,7 +57,7 @@ interface BookingCardProps {
 }
 
 function BookingCard({ booking, showCancel, onCancel }: BookingCardProps) {
-  const isIncoming = new Date(booking.date) >= new Date();
+  const isIncoming = !booking.date || dayjs(booking.date).isAfter(dayjs()) || dayjs(booking.date).isSame(dayjs(), "day");
 
   return (
     <Card withBorder>
@@ -136,15 +137,25 @@ export default function MyBookingsPage() {
   }
 
   // Filter bookings based on active tab
+  const now = dayjs();
+  // For recurring schedules without specific date, use createdAt for sorting
   const incomingBookings = bookings.filter(
-    (b) => b.status !== "cancelled" && new Date(b.date) >= new Date()
+    (b) => {
+      if (b.status === "cancelled") return false;
+      if (!b.date) return true; // Recurring bookings without date are always upcoming
+      return dayjs(b.date).isAfter(now) || dayjs(b.date).isSame(now, "day");
+    }
   );
   const pastBookings = bookings.filter(
-    (b) => b.status === "cancelled" || new Date(b.date) < new Date()
+    (b) => {
+      if (b.status === "cancelled") return true;
+      if (!b.date) return false; // Recurring bookings go to upcoming
+      return dayjs(b.date).isBefore(now, "day");
+    }
   );
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="bookings-page">
       <Title order={2}>Мои бронирования</Title>
 
       <Tabs

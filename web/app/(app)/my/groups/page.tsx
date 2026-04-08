@@ -189,7 +189,7 @@ export default function MyGroupsPage() {
   }
 
   return (
-    <Stack gap="md">
+    <Stack gap="md" data-testid="groups-page">
       <Group justify="space-between">
         <Title order={2}>Мои группы</Title>
         <Button onClick={handleOpenCreate}>Создать группу</Button>

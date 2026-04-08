@@ -20,10 +20,22 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // #region agent log H1,H2
+      fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H1',location:'login/page.tsx:handleSubmit:entry',message:'Login form submitted',data:{email:email},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const response = await login({ email, password });
+      // #region agent log H2
+      fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H2',location:'login/page.tsx:handleSubmit:loginSuccess',message:'Login API succeeded',data:{hasToken:!!response.token,hasUser:!!response.user,userId:response.user?.id},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       authLogin(response.token, response.user);
+      // #region agent log H4
+      fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H4',location:'login/page.tsx:handleSubmit:beforeRouterPush',message:'About to call router.push',data:{},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       router.push("/");
     } catch (err) {
+      // #region agent log H1,H2
+      fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H1',location:'login/page.tsx:handleSubmit:error',message:'Login failed with error',data:{error:err instanceof Error?err.message:String(err)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setError(err instanceof Error ? err.message : "Ошибка входа");
     } finally {
       setLoading(false);

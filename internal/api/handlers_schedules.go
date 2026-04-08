@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"call-booking/internal/auth"
@@ -36,7 +37,8 @@ func (h *schedulesHandler) list(w http.ResponseWriter, r *http.Request) {
 		"SELECT id, user_id, type, day_of_week, date, start_time, end_time, is_blocked, created_at FROM schedules WHERE user_id = $1 ORDER BY created_at DESC",
 		userID)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "database error")
+		log.Printf("[ERROR] schedules list query failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -47,7 +49,8 @@ func (h *schedulesHandler) list(w http.ResponseWriter, r *http.Request) {
 		var dayOfWeek *int32
 		var date *string
 		if err := rows.Scan(&s.ID, &s.UserID, &s.Type, &dayOfWeek, &date, &s.StartTime, &s.EndTime, &s.IsBlocked, &s.CreatedAt); err != nil {
-			jsonError(w, http.StatusInternalServerError, "database error")
+			log.Printf("[ERROR] schedules list scan failed: %v", err)
+			jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 			return
 		}
 		s.DayOfWeek = dayOfWeek

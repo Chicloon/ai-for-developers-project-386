@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -11,15 +12,34 @@ import (
 var jwtSecret []byte
 
 func init() {
+	// #region agent log
+	debugLog := func(msg string, data map[string]interface{}) {
+		f, _ := os.OpenFile("/home/user/git/ai-for-developers-project-386/.cursor/debug-536161.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if f != nil {
+			entry := map[string]interface{}{"id": "log_"+fmt.Sprint(time.Now().UnixNano()), "timestamp": time.Now().UnixMilli(), "location": "jwt.go:init", "message": msg, "data": data, "runId": "debug-run-1", "sessionId": "536161"}
+			json.NewEncoder(f).Encode(entry)
+			f.Close()
+		}
+	}
+	// #endregion
 	secret := os.Getenv("JWT_SECRET")
+	// #region agent log
+	debugLog("jwt_init_start", map[string]interface{}{"secret_from_env": secret != "", "secret_length": len(secret), "hypothesisId": "B"})
+	// #endregion
 	if secret == "" {
 		// Use a default for development only
 		secret = "dev-secret-key-minimum-32-characters-long"
 	}
+	// #region agent log
+	debugLog("jwt_secret_final", map[string]interface{}{"final_length": len(secret), "will_panic": len(secret) < 32, "hypothesisId": "B"})
+	// #endregion
 	if len(secret) < 32 {
 		panic("JWT_SECRET must be at least 32 characters for security")
 	}
 	jwtSecret = []byte(secret)
+	// #region agent log
+	debugLog("jwt_init_success", map[string]interface{}{"jwt_secret_length": len(jwtSecret), "hypothesisId": "B"})
+	// #endregion
 }
 
 // Claims represents JWT claims

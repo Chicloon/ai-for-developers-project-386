@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"call-booking/internal/auth"
@@ -42,7 +43,8 @@ func (h *groupsHandler) list(w http.ResponseWriter, r *http.Request) {
 		"SELECT id, owner_id, name, visibility_level, created_at FROM visibility_groups WHERE owner_id = $1 ORDER BY created_at DESC",
 		userID)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "database error")
+		log.Printf("[ERROR] groups list query failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -51,7 +53,8 @@ func (h *groupsHandler) list(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var g models.VisibilityGroup
 		if err := rows.Scan(&g.ID, &g.OwnerID, &g.Name, &g.VisibilityLevel, &g.CreatedAt); err != nil {
-			jsonError(w, http.StatusInternalServerError, "database error")
+			log.Printf("[ERROR] groups list scan failed: %v", err)
+			jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 			return
 		}
 		groups = append(groups, g)
@@ -95,7 +98,8 @@ func (h *groupsHandler) create(w http.ResponseWriter, r *http.Request) {
 		userID, req.Name, req.VisibilityLevel).
 		Scan(&g.ID, &g.OwnerID, &g.Name, &g.VisibilityLevel, &g.CreatedAt)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "database error")
+		log.Printf("[ERROR] groups create failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 
@@ -138,7 +142,8 @@ func (h *groupsHandler) update(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusNotFound, "group not found")
 			return
 		}
-		jsonError(w, http.StatusInternalServerError, "database error")
+		log.Printf("[ERROR] groups update failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 
@@ -211,7 +216,8 @@ func (h *groupsHandler) listMembers(w http.ResponseWriter, r *http.Request) {
 		var user models.User
 		if err := rows.Scan(&m.ID, &m.GroupID, &m.AddedBy, &m.AddedAt,
 			&user.ID, &user.Email, &user.Name, &user.CreatedAt); err != nil {
-			jsonError(w, http.StatusInternalServerError, "database error")
+			log.Printf("[ERROR] group members list scan failed: %v", err)
+			jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 			return
 		}
 		m.Member = user
@@ -317,7 +323,8 @@ func (h *groupsHandler) addMember(w http.ResponseWriter, r *http.Request) {
 		"SELECT id, email, name, created_at FROM users WHERE id = $1",
 		memberID).Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, "database error")
+		log.Printf("[ERROR] add member get user info failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 	m.Member = user

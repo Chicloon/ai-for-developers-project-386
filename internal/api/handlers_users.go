@@ -201,7 +201,7 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, userID, date string)
 	}
 
 	// Generate 30-min slots
-	var slots []models.Slot
+	slots := make([]models.Slot, 0)
 	slotDuration := 30 * time.Minute
 
 	for _, s := range schedules {

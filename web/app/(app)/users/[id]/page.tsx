@@ -82,6 +82,7 @@ export default function UserProfilePage() {
       await createBooking({
         ownerId: userId,
         scheduleId: scheduleId,
+        slotStartTime: slot.startTime, // FIX: Pass the specific slot time for granular booking
       });
 
       setSuccess("Запись успешно создана!");
@@ -110,7 +111,7 @@ export default function UserProfilePage() {
     );
   }
 
-  const availableSlots = slots.filter((s) => !s.isBooked);
+  const availableSlots = (slots || []).filter((s) => !s.isBooked);
 
   return (
     <Stack gap="md">

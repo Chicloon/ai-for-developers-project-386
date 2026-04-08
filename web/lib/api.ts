@@ -104,6 +104,7 @@ export interface Booking {
 export interface CreateBookingRequest {
   ownerId: string;
   scheduleId: string;
+  slotStartTime: string; // Time of the specific 30-min slot (e.g., "09:00")
 }
 
 export interface BookingsListResponse {
@@ -180,16 +181,28 @@ export async function register(data: RegisterRequest): Promise<AuthResponse> {
 }
 
 export async function login(data: LoginRequest): Promise<AuthResponse> {
+  // #region agent log H1,H5
+  fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H5',location:'api.ts:login:entry',message:'Login API call starting',data:{email:data.email},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const res = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+  // #region agent log H1,H5
+  fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H1',location:'api.ts:login:response',message:'Login API response received',data:{status:res.status,statusText:res.statusText,ok:res.ok},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!res.ok) {
     const err = await res.json();
+    // #region agent log H1
+    fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H1',location:'api.ts:login:error',message:'Login API returned error',data:{error:err.error},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     throw new Error(err.error || "Login failed");
   }
   const result = await res.json();
+  // #region agent log H2
+  fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H2',location:'api.ts:login:success',message:'Login API success, parsing response',data:{hasToken:!!result.token,tokenLength:result.token?.length,hasUser:!!result.user,userId:result.user?.id},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   setAuthToken(result.token);
   return result;
 }
@@ -355,16 +368,36 @@ export async function getMyBookings(): Promise<BookingsListResponse> {
 export async function createBooking(
   data: CreateBookingRequest
 ): Promise<Booking> {
+  // #region agent log H4
+  fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'221396'},body:JSON.stringify({sessionId:'221396',runId:'debug1',hypothesisId:'H4',location:'api.ts:createBooking:entry',message:'Create booking request',data:{ownerId:data.ownerId,scheduleId:data.scheduleId},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const res = await authFetch("/api/my/bookings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+  // #region agent log H4
+  fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'221396'},body:JSON.stringify({sessionId:'221396',runId:'debug1',hypothesisId:'H4',location:'api.ts:createBooking:response',message:'Booking response received',data:{status:res.status,statusText:res.statusText},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || "Failed to create booking");
+    const resText = await res.text();
+    // #region agent log H4
+    fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'221396'},body:JSON.stringify({sessionId:'221396',runId:'debug1',hypothesisId:'H4',location:'api.ts:createBooking:error',message:'Booking response not OK',data:{status:res.status,responsePreview:resText.substring(0,500)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    let errMsg = "Failed to create booking";
+    try {
+      const err = JSON.parse(resText);
+      errMsg = err.error || errMsg;
+    } catch (e) {
+      errMsg = resText || errMsg;
+    }
+    throw new Error(errMsg);
   }
-  return res.json();
+  const result = await res.json();
+  // #region agent log H4
+  fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'221396'},body:JSON.stringify({sessionId:'221396',runId:'debug1',hypothesisId:'H4',location:'api.ts:createBooking:success',message:'Booking created successfully',data:{bookingId:result.id},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  return result;
 }
 
 export async function cancelBooking(id: string): Promise<void> {

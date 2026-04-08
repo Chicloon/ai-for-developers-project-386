@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
+	"time"
 
 	"call-booking/internal/auth"
 	"call-booking/internal/models"
@@ -48,7 +50,8 @@ func (h *bookingsHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), query, userID)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("[ERROR] bookings list query failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -56,18 +59,33 @@ func (h *bookingsHandler) list(w http.ResponseWriter, r *http.Request) {
 	var bookings []models.Booking
 	for rows.Next() {
 		var b models.Booking
-		var cancelledAt *string
+		var cancelledAt *time.Time
+		// FIX: Use *string for nullable date field (recurring schedules have NULL date)
+		var datePtr *string
 		if err := rows.Scan(
 			&b.ID, &b.ScheduleID,
 			&b.Booker.ID, &b.Booker.Email, &b.Booker.Name,
 			&b.Owner.ID, &b.Owner.Email, &b.Owner.Name,
-			&b.Date, &b.StartTime, &b.EndTime,
+			&datePtr, &b.StartTime, &b.EndTime,
 			&b.Status, &b.CreatedAt, &cancelledAt); err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			log.Printf("[ERROR] bookings list scan failed: %v", err)
+			jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 			return
 		}
 		b.CancelledAt = cancelledAt
+		// FIX: Convert *string to string (empty if NULL)
+		if datePtr != nil {
+			b.Date = *datePtr
+		} else {
+			b.Date = ""
+		}
 		bookings = append(bookings, b)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("[ERROR] bookings list rows.Err(): %v", err)
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
+		return
 	}
 
 	if bookings == nil {
@@ -102,11 +120,19 @@ func (h *bookingsHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if slot is already booked
+	// FIX: Check for existing booking at specific slot level (schedule_id + slot_start_time)
 	var exists bool
-	err = h.pool.QueryRow(r.Context(),
-		"SELECT EXISTS(SELECT 1 FROM bookings WHERE schedule_id = $1 AND status = 'active')",
-		req.ScheduleID).Scan(&exists)
+	if req.SlotStartTime != "" {
+		// New granular check: specific slot within schedule
+		err = h.pool.QueryRow(r.Context(),
+			"SELECT EXISTS(SELECT 1 FROM bookings WHERE schedule_id = $1 AND slot_start_time = $2 AND status = 'active')",
+			req.ScheduleID, req.SlotStartTime).Scan(&exists)
+	} else {
+		// Fallback: check entire schedule (for backward compatibility)
+		err = h.pool.QueryRow(r.Context(),
+			"SELECT EXISTS(SELECT 1 FROM bookings WHERE schedule_id = $1 AND status = 'active')",
+			req.ScheduleID).Scan(&exists)
+	}
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -116,16 +142,17 @@ func (h *bookingsHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create booking
+	// Create booking - FIX: Include slot_start_time for granular slot tracking
 	var b models.Booking
 	err = h.pool.QueryRow(r.Context(),
-		`INSERT INTO bookings (schedule_id, booker_id, owner_id) 
-		 VALUES ($1, $2, $3) 
+		`INSERT INTO bookings (schedule_id, booker_id, owner_id, slot_start_time)
+		 VALUES ($1, $2, $3, $4)
 		 RETURNING id, schedule_id, booker_id, owner_id, status, created_at`,
-		req.ScheduleID, userID, req.OwnerID).
+		req.ScheduleID, userID, req.OwnerID, req.SlotStartTime).
 		Scan(&b.ID, &b.ScheduleID, &b.Booker.ID, &b.Owner.ID, &b.Status, &b.CreatedAt)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("[ERROR] booking create failed: %v", err)
+		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 
@@ -136,9 +163,12 @@ func (h *bookingsHandler) create(w http.ResponseWriter, r *http.Request) {
 		"SELECT email, name FROM users WHERE id = $1", req.OwnerID).Scan(&b.Owner.Email, &b.Owner.Name)
 
 	// Get schedule info
-	h.pool.QueryRow(r.Context(),
+	schedErr := h.pool.QueryRow(r.Context(),
 		"SELECT date, start_time, end_time FROM schedules WHERE id = $1", req.ScheduleID).
 		Scan(&b.Date, &b.StartTime, &b.EndTime)
+	if schedErr != nil {
+		log.Printf("[WARN] could not fetch schedule info: %v", schedErr)
+	}
 
 	jsonResponse(w, http.StatusCreated, b)
 }

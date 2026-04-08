@@ -2,7 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"time"
 
 	"call-booking/internal/auth"
 	"call-booking/internal/models"
@@ -64,7 +67,7 @@ func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
 	// Create user
 	var user models.User
 	err = h.pool.QueryRow(r.Context(),
-		"INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
+		"INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, created_at",
 		req.Email, hash, req.Name).
 		Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err != nil {
@@ -86,8 +89,22 @@ func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
+	// #region agent log
+	debugLog := func(msg string, data map[string]interface{}) {
+		f, _ := os.OpenFile("/home/user/git/ai-for-developers-project-386/.cursor/debug-eb49d8.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if f != nil {
+			entry := map[string]interface{}{"id": "log_"+fmt.Sprint(time.Now().UnixNano()), "timestamp": time.Now().UnixMilli(), "location": "handlers_auth.go:login", "message": msg, "data": data, "runId": "debug1", "sessionId": "eb49d8"}
+			json.NewEncoder(f).Encode(entry)
+			f.Close()
+		}
+	}
+	debugLog("login_handler_entry", map[string]interface{}{"pool_is_nil": h.pool == nil, "hypothesisId": "H1"})
+	// #endregion
 	var req models.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// #region agent log
+	debugLog("json_decode_error", map[string]interface{}{"error": err.Error(), "hypothesisId": "H1"})
+	// #endregion
 		jsonError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -101,10 +118,16 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 	// Find user
 	var user models.User
 	var passwordHash string
+	// #region agent log
+	debugLog("before_db_query", map[string]interface{}{"email": req.Email, "pool_is_nil": h.pool == nil, "hypothesisId": "H1"})
+	// #endregion
 	err := h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name, password_hash, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM users WHERE email = $1",
+		"SELECT id, email, name, password_hash, created_at FROM users WHERE email = $1",
 		req.Email).
 		Scan(&user.ID, &user.Email, &user.Name, &passwordHash, &user.CreatedAt)
+	// #region agent log
+	debugLog("after_db_query", map[string]interface{}{"error": fmt.Sprint(err), "is_no_rows": err == pgx.ErrNoRows, "user_found": err == nil, "hypothesisId": "H1"})
+	// #endregion
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			// Run dummy bcrypt to prevent timing attacks
@@ -112,23 +135,41 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, http.StatusUnauthorized, "invalid email or password")
 			return
 		}
+		// #region agent log
+		debugLog("db_error_not_no_rows", map[string]interface{}{"error": err.Error(), "hypothesisId": "H1"})
+		// #endregion
 		jsonError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
 	// Check password
+	// #region agent log
+	debugLog("before_check_password", map[string]interface{}{"password_hash_length": len(passwordHash), "hypothesisId": "H1"})
+	// #endregion
 	if !auth.CheckPassword(req.Password, passwordHash) {
+		// #region agent log
+		debugLog("password_check_failed", map[string]interface{}{"hypothesisId": "H1"})
+		// #endregion
 		jsonError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
 
 	// Generate token
+	// #region agent log
+	debugLog("before_generate_token", map[string]interface{}{"user_id": user.ID, "email": user.Email, "hypothesisId": "H2"})
+	// #endregion
 	token, err := auth.GenerateToken(user.ID, user.Email)
+	// #region agent log
+	debugLog("after_generate_token", map[string]interface{}{"error": fmt.Sprint(err), "token_empty": token == "", "token_length": len(token), "hypothesisId": "H2"})
+	// #endregion
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "failed to generate token")
 		return
 	}
 
+	// #region agent log
+	debugLog("login_success", map[string]interface{}{"user_id": user.ID, "token_length": len(token), "hypothesisId": "H2"})
+	// #endregion
 	jsonResponse(w, http.StatusOK, models.AuthResponse{
 		Token: token,
 		User:  user,
@@ -140,7 +181,7 @@ func (h *authHandler) me(w http.ResponseWriter, r *http.Request) {
 
 	var user models.User
 	err := h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM users WHERE id = $1",
+		"SELECT id, email, name, created_at FROM users WHERE id = $1",
 		userID).
 		Scan(&user.ID, &user.Email, &user.Name, &user.CreatedAt)
 	if err != nil {

@@ -36,6 +36,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = (token: string, userData: User) => {
+    // #region agent log H4
+    fetch('http://127.0.0.1:7924/ingest/df065418-75a6-4c94-b505-bfe4e2e4e84a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb49d8'},body:JSON.stringify({sessionId:'eb49d8',runId:'debug1',hypothesisId:'H4',location:'AuthProvider.tsx:login',message:'AuthProvider login called',data:{hasToken:!!token,tokenLength:token?.length,hasUser:!!userData,userId:userData?.id},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     setAuthToken(token);
     setUser(userData);
   };

@@ -12,9 +12,34 @@ import (
 
 	"call-booking/internal/api"
 	"call-booking/internal/db"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// #region agent log H6
+	f, _ := os.OpenFile("/home/user/git/ai-for-developers-project-386/.cursor/debug-eb49d8.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		fmt.Fprintf(f, `{"sessionId":"eb49d8","runId":"fix-verify","hypothesisId":"H6","location":"main.go:start","message":"Server starting","data":{},"timestamp":%d}`+"\n", time.Now().UnixMilli())
+		f.Close()
+	}
+	// #endregion
+
+	// Load .env file
+	if err := godotenv.Load(".env"); err != nil {
+		log.Printf("Warning: .env file not found or error loading: %v", err)
+	}
+
+	// #region agent log H6
+	f, _ = os.OpenFile("/home/user/git/ai-for-developers-project-386/.cursor/debug-eb49d8.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		dsn := os.Getenv("DATABASE_URL")
+		port := os.Getenv("PORT")
+		fmt.Fprintf(f, `{"sessionId":"eb49d8","runId":"fix-verify","hypothesisId":"H6","location":"main.go:after_env_load","message":"Environment loaded","data":{"dsn_empty":"%v","dsn_preview":"%s","port":"%s"},"timestamp":%d}`+"\n", dsn == "", dsn[:min(len(dsn), 30)], port, time.Now().UnixMilli())
+		f.Close()
+	}
+	// #endregion
+
 	ctx := context.Background()
 
 	pool, err := db.NewPool(ctx)
