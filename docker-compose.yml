@@ -27,12 +27,6 @@ services:
     restart: unless-stopped
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-      args:
-        API_PROXY_URL: http://api:8080
-        BUILD_SHA: "compose-local"
     image: ghcr.io/chicloon/ai-for-developers-project-386/web:latest
     environment:
       API_PROXY_URL: "http://api:8080"
