@@ -3,6 +3,7 @@ import "@mantine/core/styles.css";
 import "@mantine/dates/styles.css";
 import "@mantine/schedule/styles.css";
 import { MantineProvider, ColorSchemeScript, createTheme } from "@mantine/core";
+import { DatesProvider } from "@mantine/dates";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import dayjs from "dayjs";
 import "dayjs/locale/ru";
@@ -22,8 +23,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ru" suppressHydrationWarning>
       <head><ColorSchemeScript /></head>
       <body>
-        <MantineProvider theme={theme} defaultColorScheme="light" dates={{ locale: "ru" }}>
-          <AuthProvider>{children}</AuthProvider>
+        <MantineProvider theme={theme} defaultColorScheme="light">
+          <DatesProvider settings={{ locale: "ru" }}>
+            <AuthProvider>{children}</AuthProvider>
+          </DatesProvider>
         </MantineProvider>
       </body>
     </html>
