@@ -89,16 +89,18 @@ type GroupMember struct {
 
 // Booking with user info
 type Booking struct {
-	ID          string  `json:"id"`
-	ScheduleID  string  `json:"scheduleId"`
-	Booker      User    `json:"booker"`
-	Owner       User    `json:"owner"`
-	Date        string  `json:"date"`
-	StartTime   string  `json:"startTime"`
-	EndTime     string  `json:"endTime"`
-	Status      string  `json:"status"`
-	CreatedAt   string  `json:"createdAt,omitempty"`
-	CancelledAt *string `json:"cancelledAt,omitempty"`
+	ID          string            `json:"id"`
+	ScheduleID  string            `json:"scheduleId"`
+	Booker      User              `json:"booker"`
+	Owner       User              `json:"owner"`
+	Date        string            `json:"date"`
+	StartTime   string            `json:"startTime"`
+	EndTime     string            `json:"endTime"`
+	Status      string            `json:"status"`
+	CreatedAt   string            `json:"createdAt,omitempty"`
+	CancelledAt *string           `json:"cancelledAt,omitempty"`
+	GroupIDs    []string          `json:"groupIds,omitempty"`
+	Groups      []VisibilityGroup `json:"groups,omitempty"` // Full group details for display
 }
 
 type CreateBookingRequest struct {

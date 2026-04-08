@@ -39,9 +39,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <MantineAppShell.Navbar p="md">
         <Stack gap="xs">
-          <Button component={Link} href="/" variant="subtle" justify="start" data-testid="nav-users">Каталог пользователей</Button>
-          <Button component={Link} href="/my/schedule" variant="subtle" justify="start" data-testid="nav-schedule">Моё расписание</Button>
           <Button component={Link} href="/my/bookings" variant="subtle" justify="start" data-testid="nav-bookings">Мои бронирования</Button>
+          <Button component={Link} href="/users" variant="subtle" justify="start" data-testid="nav-users">Каталог пользователей</Button>
+          <Button component={Link} href="/my/schedule" variant="subtle" justify="start" data-testid="nav-schedule">Моё расписание</Button>
         </Stack>
       </MantineAppShell.Navbar>
 

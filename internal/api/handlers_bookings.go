@@ -32,17 +32,26 @@ func bookingsRouter(pool *pgxpool.Pool) http.Handler {
 func (h *bookingsHandler) list(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 
+	// First, fetch bookings with their group IDs
 	query := `
 		SELECT b.id, b.schedule_id,
 		       bu.id, bu.email, bu.name,
 		       ou.id, ou.email, ou.name,
-		       CASE WHEN s.type = 'recurring' THEN '' ELSE TO_CHAR(s.date, 'YYYY-MM-DD') END, s.start_time, s.end_time,
-		       b.status, TO_CHAR(b.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), TO_CHAR(b.cancelled_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		       TO_CHAR(b.slot_date, 'YYYY-MM-DD'), b.slot_start_time,
+		       TO_CHAR((b.slot_start_time::time + interval '30 minutes'), 'HH24:MI:SS'),
+		       b.status, TO_CHAR(b.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), TO_CHAR(b.cancelled_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       COALESCE(
+			       ARRAY_AGG(svg.group_id) FILTER (WHERE svg.group_id IS NOT NULL),
+			       ARRAY[]::UUID[]
+		       ) as group_ids
 		FROM bookings b
 		JOIN users bu ON bu.id = b.booker_id
 		JOIN users ou ON ou.id = b.owner_id
 		JOIN schedules s ON s.id = b.schedule_id
+		LEFT JOIN schedule_visibility_groups svg ON svg.schedule_id = b.schedule_id
 		WHERE b.booker_id = $1 OR b.owner_id = $1
+		GROUP BY b.id, b.schedule_id, bu.id, bu.email, bu.name, ou.id, ou.email, ou.name,
+		         b.slot_date, b.slot_start_time, b.status, b.created_at, b.cancelled_at
 		ORDER BY b.created_at DESC
 	`
 
@@ -54,24 +63,99 @@ func (h *bookingsHandler) list(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var bookings []models.Booking
+	bookingGroupIDs := make(map[string][]string) // booking ID -> group IDs
+
 	for rows.Next() {
 		var b models.Booking
 		var cancelledAt *string
+		var groupIDs []string
 		if err := rows.Scan(
 			&b.ID, &b.ScheduleID,
 			&b.Booker.ID, &b.Booker.Email, &b.Booker.Name,
 			&b.Owner.ID, &b.Owner.Email, &b.Owner.Name,
 			&b.Date, &b.StartTime, &b.EndTime,
-			&b.Status, &b.CreatedAt, &cancelledAt); err != nil {
+			&b.Status, &b.CreatedAt, &cancelledAt, &groupIDs); err != nil {
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		b.CancelledAt = cancelledAt
+		b.Groups = []models.VisibilityGroup{} // Initialize empty groups slice
+		cleanGroupIDs := filterEmptyUUIDs(groupIDs)
+		if len(cleanGroupIDs) > 0 {
+			bookingGroupIDs[b.ID] = cleanGroupIDs
+		}
 		bookings = append(bookings, b)
 	}
 
 	if bookings == nil {
 		bookings = []models.Booking{}
+	}
+
+	// Fetch group details for all group IDs
+	if len(bookingGroupIDs) > 0 {
+		// Collect all unique group IDs
+		groupIDSet := make(map[string]bool)
+		for _, ids := range bookingGroupIDs {
+			for _, id := range ids {
+				groupIDSet[id] = true
+			}
+		}
+
+		// Build slice of unique IDs
+		uniqueGroupIDs := make([]string, 0, len(groupIDSet))
+		for id := range groupIDSet {
+			uniqueGroupIDs = append(uniqueGroupIDs, id)
+		}
+
+		// Fetch all group details
+		groupQuery := `
+			SELECT id, owner_id, name, visibility_level
+			FROM visibility_groups
+			WHERE id = ANY($1)
+		`
+		groupRows, err := h.pool.Query(r.Context(), groupQuery, uniqueGroupIDs)
+		if err == nil {
+			defer groupRows.Close()
+			allGroupMap := make(map[string]models.VisibilityGroup)
+		for groupRows.Next() {
+			var g models.VisibilityGroup
+			if err := groupRows.Scan(&g.ID, &g.OwnerID, &g.Name, &g.VisibilityLevel); err == nil {
+				allGroupMap[g.ID] = g
+			}
+		}
+
+			// Get user's membership in groups
+			memberQuery := `
+				SELECT group_id FROM group_members
+				WHERE group_id = ANY($1) AND member_id = $2
+			`
+			memberRows, err := h.pool.Query(r.Context(), memberQuery, uniqueGroupIDs, userID)
+			userMemberGroups := make(map[string]bool)
+			if err == nil {
+				defer memberRows.Close()
+			for memberRows.Next() {
+				var groupID string
+				if err := memberRows.Scan(&groupID); err == nil {
+					userMemberGroups[groupID] = true
+				}
+			}
+			}
+
+		// Assign groups to bookings based on ownership
+		for i := range bookings {
+			if ids, ok := bookingGroupIDs[bookings[i].ID]; ok {
+				isOwner := bookings[i].Owner.ID == userID
+				for _, id := range ids {
+					if g, found := allGroupMap[id]; found {
+						// If owner: show all groups; if booker: show only groups where user is member
+						if isOwner || userMemberGroups[id] {
+							bookings[i].Groups = append(bookings[i].Groups, g)
+						}
+					}
+				}
+			}
+		}
+		}
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]interface{}{"bookings": bookings})

@@ -102,6 +102,8 @@ export interface Booking {
   status: "active" | "cancelled";
   createdAt?: string;
   cancelledAt?: string;
+  groupIds?: string[];
+  groups?: VisibilityGroup[]; // Full group details with names
 }
 
 export interface CreateBookingRequest {

@@ -17,6 +17,7 @@
     "@mantine/core": "latest",
     "@mantine/dates": "latest",
     "@mantine/hooks": "latest",
+    "@mantine/schedule": "^9.0.1",
     "@tabler/icons-react": "latest",
     "dayjs": "latest",
     "next": "latest",
