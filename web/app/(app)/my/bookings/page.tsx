@@ -184,7 +184,7 @@ export default function MyBookingsPage() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [modalOpened, setModalOpened] = useState(false);
-  const [view, setView] = useState<'month' | 'week' | 'day'>('month');
+  const [view, setView] = useState<'month' | 'week' | 'day' | 'year'>('month');
 
   const handleViewChange = (newView: 'month' | 'week' | 'day' | 'year') => {
     setView(newView);
