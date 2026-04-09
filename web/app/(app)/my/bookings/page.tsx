@@ -299,15 +299,21 @@ export default function MyBookingsPage() {
 
   if (loading) {
     return (
-      <Center h="50vh">
+      <Center h="50vh" data-testid="bookings-loading">
         <Loader />
       </Center>
     );
   }
 
   return (
-    <Stack gap="md">
-      <Title order={2}>Мои бронирования</Title>
+    <Stack gap="md" data-testid="bookings-page">
+      <Title order={2} data-testid="bookings-title">Мои бронирования</Title>
+
+      {bookings.length === 0 && (
+        <Text c="dimmed" size="sm" data-testid="bookings-empty">
+          У вас пока нет бронирований
+        </Text>
+      )}
 
       <div ref={scheduleRef}>
         <DatesProvider settings={{ locale: "ru" }}>

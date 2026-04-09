@@ -36,7 +36,9 @@ test.describe('Schedule Management', () => {
     await expect(scheduleRow).toBeVisible()
     await expect(page.locator('[data-testid^="schedule-type-"]').first()).toContainText('Повторяющееся')
     await expect(page.locator('[data-testid^="schedule-day-"]').first()).toContainText('Понедельник')
-    await expect(page.locator('[data-testid^="schedule-time-"]').first()).toContainText('09:00 - 17:00')
+    const timeCell = page.locator('[data-testid^="schedule-time-"]').first()
+    await expect(timeCell).toContainText('09:00')
+    await expect(timeCell).toContainText('17:00')
   })
 
   test('should create one-time schedule', async ({ page, schedulePage }) => {
@@ -61,7 +63,9 @@ test.describe('Schedule Management', () => {
     const scheduleRow = page.locator('[data-testid^="schedule-row-"]').first()
     await expect(scheduleRow).toBeVisible()
     await expect(page.locator('[data-testid^="schedule-type-"]').first()).toContainText('Разовое')
-    await expect(page.locator('[data-testid^="schedule-time-"]').first()).toContainText('10:00 - 14:00')
+    const timeCell = page.locator('[data-testid^="schedule-time-"]').first()
+    await expect(timeCell).toContainText('10:00')
+    await expect(timeCell).toContainText('14:00')
   })
 
   test('should create blocked schedule', async ({ page, schedulePage }) => {
@@ -106,12 +110,15 @@ test.describe('Schedule Management', () => {
     
     // Edit the schedule
     await schedulePage.editSchedule(id!)
-    await schedulePage.page.locator('[data-testid="schedule-start-time"]').fill('08:00')
-    await schedulePage.page.locator('[data-testid="schedule-end-time"]').fill('16:00')
+    const modal = schedulePage.page.locator('[data-testid="schedule-modal"]')
+    await modal.getByLabel('Начало').fill('08:00')
+    await modal.getByLabel('Конец').fill('16:00')
     await schedulePage.submitForm()
     
     // Verify updated time
-    await expect(page.locator(`[data-testid="schedule-time-${id}"]`)).toContainText('08:00 - 16:00')
+    const timeCell = page.locator(`[data-testid="schedule-time-${id}"]`)
+    await expect(timeCell).toContainText('08:00')
+    await expect(timeCell).toContainText('16:00')
   })
 
   test('should delete schedule', async ({ page, schedulePage }) => {

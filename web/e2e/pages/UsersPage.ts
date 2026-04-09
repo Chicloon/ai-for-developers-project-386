@@ -14,12 +14,12 @@ export class UsersPage {
   }
 
   async goto() {
-    await this.page.goto('/')
+    await this.page.goto('/users')
     await expect(this.page.locator('[data-testid="users-page"]')).toBeVisible()
   }
 
   async waitForLoad() {
-    await this.loadingIndicator.waitFor({ state: 'hidden' })
+    await this.title.waitFor({ state: 'visible' })
   }
 
   async getUserCard(userId: string) {

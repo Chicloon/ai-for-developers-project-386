@@ -26,7 +26,6 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('[data-testid="app-logo"]')).toBeVisible()
     await expect(page.locator('[data-testid="nav-users"]')).toBeVisible()
     await expect(page.locator('[data-testid="nav-schedule"]')).toBeVisible()
-    await expect(page.locator('[data-testid="nav-groups"]')).toBeVisible()
     await expect(page.locator('[data-testid="nav-bookings"]')).toBeVisible()
   })
 
@@ -38,16 +37,12 @@ test.describe('Smoke Tests', () => {
     await page.locator('[data-testid="nav-schedule"]').click()
     await expect(page).toHaveURL('/my/schedule')
     
-    // Navigate to groups
-    await page.locator('[data-testid="nav-groups"]').click()
-    await expect(page).toHaveURL('/my/groups')
-    
     // Navigate to bookings
     await page.locator('[data-testid="nav-bookings"]').click()
     await expect(page).toHaveURL('/my/bookings')
     
-    // Navigate back to users
+    // Navigate to booking (users) catalog
     await page.locator('[data-testid="nav-users"]').click()
-    await expect(page).toHaveURL('/')
+    await expect(page).toHaveURL('/users')
   })
 })

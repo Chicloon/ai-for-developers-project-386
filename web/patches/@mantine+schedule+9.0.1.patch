@@ -1,0 +1,76 @@
+diff --git a/node_modules/@mantine/schedule/cjs/components/MonthView/MonthView.cjs b/node_modules/@mantine/schedule/cjs/components/MonthView/MonthView.cjs
+index 4724e57..ecbf253 100644
+--- a/node_modules/@mantine/schedule/cjs/components/MonthView/MonthView.cjs
++++ b/node_modules/@mantine/schedule/cjs/components/MonthView/MonthView.cjs
+@@ -274,6 +274,7 @@ const MonthView = (0, _mantine_core.factory)((_props) => {
+ 				events: dayEvents,
+ 				moreEventsCount: hiddenEventsCount,
+ 				mode,
++				onEventClick,
+ 				style: {
+ 					position: "absolute",
+ 					top: `calc(100% - 2px)`,
+diff --git a/node_modules/@mantine/schedule/cjs/components/MoreEvents/MoreEvents.cjs b/node_modules/@mantine/schedule/cjs/components/MoreEvents/MoreEvents.cjs
+index 3db7fe0..0872e62 100644
+--- a/node_modules/@mantine/schedule/cjs/components/MoreEvents/MoreEvents.cjs
++++ b/node_modules/@mantine/schedule/cjs/components/MoreEvents/MoreEvents.cjs
+@@ -10,7 +10,7 @@ let react_jsx_runtime = require("react/jsx-runtime");
+ const defaultProps = { dropdownType: "popover" };
+ const MoreEvents = (0, _mantine_core.factory)((_props) => {
+ 	const props = (0, _mantine_core.useProps)("MoreEvents", defaultProps, _props);
+-	const { classNames, className, style, styles, unstyled, vars, attributes, radius, dropdownType, events, moreEventsCount, popoverProps, modalProps, onDropdownClose, children, modalTitle, renderEventBody, id, labels, mode, ...others } = props;
++	const { classNames, className, style, styles, unstyled, vars, attributes, radius, dropdownType, events, moreEventsCount, popoverProps, modalProps, onDropdownClose, children, modalTitle, renderEventBody, id, labels, mode, onEventClick, ...others } = props;
+ 	const [dropdownOpened, dropdownHandlers] = (0, _mantine_hooks.useDisclosure)();
+ 	const getStyles = (0, _mantine_core.useStyles)({
+ 		name: "MoreEvents",
+@@ -37,7 +37,11 @@ const MoreEvents = (0, _mantine_core.factory)((_props) => {
+ 			size: "md",
+ 			renderEventBody,
+ 			mode,
+-			children: event.title
++			children: event.title,
++			onClick: onEventClick ? (e) => {
++				handleClose();
++				onEventClick(event, e);
++			} : void 0
+ 		}, event.id))
+ 	});
+ 	return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [dropdownType === "modal" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_mantine_core.Modal, {
+diff --git a/node_modules/@mantine/schedule/esm/components/MonthView/MonthView.mjs b/node_modules/@mantine/schedule/esm/components/MonthView/MonthView.mjs
+index a1a4e45..0ce0c32 100644
+--- a/node_modules/@mantine/schedule/esm/components/MonthView/MonthView.mjs
++++ b/node_modules/@mantine/schedule/esm/components/MonthView/MonthView.mjs
+@@ -272,6 +272,7 @@ const MonthView = factory((_props) => {
+ 				events: dayEvents,
+ 				moreEventsCount: hiddenEventsCount,
+ 				mode,
++				onEventClick,
+ 				style: {
+ 					position: "absolute",
+ 					top: `calc(100% - 2px)`,
+diff --git a/node_modules/@mantine/schedule/esm/components/MoreEvents/MoreEvents.mjs b/node_modules/@mantine/schedule/esm/components/MoreEvents/MoreEvents.mjs
+index 386a11c..ba7594f 100644
+--- a/node_modules/@mantine/schedule/esm/components/MoreEvents/MoreEvents.mjs
++++ b/node_modules/@mantine/schedule/esm/components/MoreEvents/MoreEvents.mjs
+@@ -9,7 +9,7 @@ import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+ const defaultProps = { dropdownType: "popover" };
+ const MoreEvents = factory((_props) => {
+ 	const props = useProps("MoreEvents", defaultProps, _props);
+-	const { classNames, className, style, styles, unstyled, vars, attributes, radius, dropdownType, events, moreEventsCount, popoverProps, modalProps, onDropdownClose, children, modalTitle, renderEventBody, id, labels, mode, ...others } = props;
++	const { classNames, className, style, styles, unstyled, vars, attributes, radius, dropdownType, events, moreEventsCount, popoverProps, modalProps, onDropdownClose, children, modalTitle, renderEventBody, id, labels, mode, onEventClick, ...others } = props;
+ 	const [dropdownOpened, dropdownHandlers] = useDisclosure();
+ 	const getStyles = useStyles({
+ 		name: "MoreEvents",
+@@ -36,7 +36,11 @@ const MoreEvents = factory((_props) => {
+ 			size: "md",
+ 			renderEventBody,
+ 			mode,
+-			children: event.title
++			children: event.title,
++			onClick: onEventClick ? (e) => {
++				handleClose();
++				onEventClick(event, e);
++			} : void 0
+ 		}, event.id))
+ 	});
+ 	return /* @__PURE__ */ jsxs(Fragment, { children: [dropdownType === "modal" && /* @__PURE__ */ jsx(Modal, {

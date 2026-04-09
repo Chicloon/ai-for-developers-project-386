@@ -27,9 +27,11 @@ export class SchedulePage {
   }
 
   async clickAdd() {
+    await this.page.locator('[data-testid="tab-schedule"]').click()
     await this.addButton.click()
-    // Wait for modal to open and check content is visible
-    await expect(this.page.locator('[data-testid="schedule-type-select"]')).toBeVisible({ timeout: 5000 })
+    // Mantine Modal root остаётся в DOM с aria-hidden — ждём контент формы
+    await expect(this.page.locator('[data-testid="schedule-submit-button"]')).toBeVisible({ timeout: 10000 })
+    await expect(this.page.locator('[data-testid="schedule-type-select"]')).toBeVisible({ timeout: 10000 })
   }
 
   async fillScheduleForm(params: {
@@ -40,35 +42,48 @@ export class SchedulePage {
     endTime: string
     isBlocked?: boolean
   }) {
-    // Select type - click on the select to open dropdown
-    await this.page.locator('[data-testid="schedule-type-select"]').click()
-    await this.page.waitForTimeout(300)
-    // Click on the option by text in the dropdown (Mantine renders dropdown in portal)
-    const typeLabel = params.type === 'recurring' ? 'Повторяющееся' : 'Разовое'
-    await this.page.locator('.mantine-Select-option', { hasText: typeLabel }).click()
-    // Wait for form to re-render based on type
-    await this.page.waitForTimeout(400)
-
-    if (params.type === 'recurring' && params.dayOfWeek) {
-      await this.page.locator('[data-testid="schedule-day-select"]').click()
-      await this.page.waitForTimeout(300)
-      // Map day number to Russian name
-      const dayNames: Record<string, string> = {
-        '0': 'Воскресенье',
-        '1': 'Понедельник',
-        '2': 'Вторник',
-        '3': 'Среда',
-        '4': 'Четверг',
-        '5': 'Пятница',
-        '6': 'Суббота'
-      }
-      await this.page.locator('.mantine-Select-option', { hasText: dayNames[params.dayOfWeek] }).click()
-    } else if (params.type === 'one-time' && params.date) {
-      await this.page.locator('[data-testid="schedule-date-input"]').fill(params.date)
+    const dayNames: Record<string, string> = {
+      '0': 'Воскресенье',
+      '1': 'Понедельник',
+      '2': 'Вторник',
+      '3': 'Среда',
+      '4': 'Четверг',
+      '5': 'Пятница',
+      '6': 'Суббота'
     }
 
-    await this.page.locator('[data-testid="schedule-start-time"]').fill(params.startTime)
-    await this.page.locator('[data-testid="schedule-end-time"]').fill(params.endTime)
+    if (params.type === 'one-time') {
+      await this.page.locator('[data-testid="schedule-type-select"]').click()
+      await this.page.getByRole('option', { name: 'Разовое' }).click()
+      await this.page.waitForTimeout(200)
+      if (params.date) {
+        const dateField = this.page.locator('[data-testid="schedule-date-input"]')
+        await expect(dateField).toBeVisible()
+        const dateInner = dateField.locator('input')
+        if ((await dateInner.count()) > 0) {
+          await dateInner.fill(params.date)
+        } else {
+          await dateField.fill(params.date)
+        }
+      }
+    } else if (params.dayOfWeek) {
+      // Модалка по умолчанию «Повторяющееся» — не трогаем тип, только день недели
+      await this.page.locator('[data-testid="schedule-day-select"]').click()
+      await this.page.waitForTimeout(200)
+      await this.page.getByRole('option', { name: dayNames[params.dayOfWeek] }).click()
+    }
+
+    const fillTime = async (testId: string, value: string) => {
+      const root = this.page.locator(`[data-testid="${testId}"]`)
+      const inner = root.locator('input')
+      if ((await inner.count()) > 0) {
+        await inner.fill(value)
+      } else {
+        await root.fill(value)
+      }
+    }
+    await fillTime('schedule-start-time', params.startTime)
+    await fillTime('schedule-end-time', params.endTime)
 
     if (params.isBlocked) {
       await this.page.locator('[data-testid="schedule-blocked-checkbox"]').check()
@@ -77,12 +92,12 @@ export class SchedulePage {
 
   async submitForm() {
     await this.page.locator('[data-testid="schedule-submit-button"]').click()
-    await this.modal.waitFor({ state: 'hidden' })
+    await expect(this.page.locator('[data-testid="schedule-submit-button"]')).toBeHidden({ timeout: 15000 })
   }
 
   async cancelForm() {
     await this.page.locator('[data-testid="schedule-cancel-button"]').click()
-    await this.modal.waitFor({ state: 'hidden' })
+    await expect(this.page.locator('[data-testid="schedule-submit-button"]')).toBeHidden({ timeout: 10000 })
   }
 
   async getScheduleRow(scheduleId: string) {

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "patch-package",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -17,6 +18,7 @@
     "@mantine/core": "latest",
     "@mantine/dates": "latest",
     "@mantine/hooks": "latest",
+    "@mantine/notifications": "^9.0.1",
     "@mantine/schedule": "^9.0.1",
     "@tabler/icons-react": "latest",
     "dayjs": "latest",
@@ -29,6 +31,7 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "patch-package": "^8.0.1",
     "postcss": "latest",
     "postcss-preset-mantine": "latest",
     "postcss-simple-vars": "latest",

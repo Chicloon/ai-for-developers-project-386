@@ -1,6 +1,6 @@
 "use client";
 
-import { Modal, Button, Stack, Text, Group } from "@mantine/core";
+import { Modal, Button, Stack, Text, Group, Paper } from "@mantine/core";
 import { Slot } from "@/lib/api";
 
 interface BookingConfirmationModalProps {
@@ -69,7 +69,7 @@ export default function BookingConfirmationModal({
           бронирования".
         </Text>
 
-        <Group justify="flex-end" mt="md">
+        <Group justify="flex-end" mt="md" visibleFrom="sm">
           <Button variant="default" onClick={onClose} disabled={loading}>
             Отмена
           </Button>
@@ -77,6 +77,23 @@ export default function BookingConfirmationModal({
             Подтвердить запись
           </Button>
         </Group>
+
+        <Paper
+          hiddenFrom="sm"
+          withBorder
+          p="xs"
+          radius="md"
+          style={{ position: "sticky", bottom: 0 }}
+        >
+          <Stack gap="xs">
+            <Button fullWidth onClick={onConfirm} loading={loading}>
+              Подтвердить запись
+            </Button>
+            <Button fullWidth variant="default" onClick={onClose} disabled={loading}>
+              Отмена
+            </Button>
+          </Stack>
+        </Paper>
       </Stack>
     </Modal>
   );

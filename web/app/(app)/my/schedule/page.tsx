@@ -284,7 +284,7 @@ export default function MySchedulePage() {
 
   if (loading) {
     return (
-      <Center h="50vh">
+      <Center h="50vh" data-testid="schedule-loading">
         <Loader />
       </Center>
     );
@@ -292,7 +292,7 @@ export default function MySchedulePage() {
 
   return (
     <Stack gap="md" data-testid="schedule-page">
-      <Title order={2}>Моё расписание</Title>
+      <Title order={2} data-testid="schedule-title">Моё расписание</Title>
 
       <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List>

@@ -416,10 +416,10 @@ func TestUsersSlots_BookedSlot(t *testing.T) {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
-	// Create a booking
+	// Create a booking (slot_date обязателен для фильтра getSlotsForDate)
 	_, err = pool.Exec(ctx,
-		"INSERT INTO bookings (schedule_id, booker_id, owner_id, status, slot_start_time) VALUES ($1, $2, $3, 'active', '09:00')",
-		scheduleID, currentUserID, ownerID)
+		"INSERT INTO bookings (schedule_id, booker_id, owner_id, status, slot_start_time, slot_date) VALUES ($1, $2, $3, 'active', '09:00:00', $4::date)",
+		scheduleID, currentUserID, ownerID, tomorrow)
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -433,14 +433,22 @@ func TestUsersSlots_BookedSlot(t *testing.T) {
 	var resp map[string][]models.Slot
 	parseResponse(t, rr, &resp)
 
-	// Find the 09:00 slot and check it's marked as booked
+	// Забронированный слот 09:00 не должен попадать в список доступных
 	for _, slot := range resp["slots"] {
 		if slot.StartTime == "09:00" {
-			if !slot.IsBooked {
-				t.Error("expected 09:00 slot to be marked as booked")
-			}
+			t.Error("booked 09:00–09:30 slot must not appear in available slots list")
+		}
+	}
+	// Остаётся свободный слот 09:30–10:00
+	var has0930 bool
+	for _, slot := range resp["slots"] {
+		if slot.StartTime == "09:30" {
+			has0930 = true
 			break
 		}
+	}
+	if !has0930 {
+		t.Error("expected free 09:30 slot to still be available")
 	}
 }
 

@@ -2,13 +2,12 @@ import { test, expect, registerAndLogin, loginUser } from '../../fixtures/auth'
 
 test.describe('Authentication', () => {
   test.describe('Registration', () => {
-    test('should register new user successfully', async ({ page, registerPage, usersPage, testUser }) => {
+    test('should register new user successfully', async ({ page, registerPage, testUser }) => {
       await registerPage.goto()
       await registerPage.register(testUser.name, testUser.email, testUser.password)
       
-      // Should redirect to home page
-      await expect(page).toHaveURL('/')
-      await usersPage.waitForLoad()
+      await expect(page).toHaveURL(/\/($|my\/bookings$)/)
+      await expect(page.locator('[data-testid="user-name"]')).toBeVisible()
       
       // Verify logged in state
       await expect(page.locator('[data-testid="user-name"]')).toContainText(testUser.name)
@@ -45,7 +44,7 @@ test.describe('Authentication', () => {
   })
 
   test.describe('Login', () => {
-    test('should login existing user', async ({ page, loginPage, usersPage, testUser }) => {
+    test('should login existing user', async ({ page, loginPage, testUser }) => {
       // First register the user
       await registerAndLogin(page, testUser)
       
@@ -57,8 +56,8 @@ test.describe('Authentication', () => {
       await loginPage.goto()
       await loginPage.login(testUser.email, testUser.password)
       
-      await expect(page).toHaveURL('/')
-      await usersPage.waitForLoad()
+      await expect(page).toHaveURL(/\/($|my\/bookings$)/)
+      await expect(page.locator('[data-testid="user-name"]')).toBeVisible()
       await expect(page.locator('[data-testid="user-name"]')).toContainText(testUser.name)
     })
 
@@ -99,15 +98,17 @@ test.describe('Authentication', () => {
     test('should allow access after login', async ({ page, testUser }) => {
       await registerAndLogin(page, testUser)
       
-      // Should be able to access protected routes
       await page.goto('/my/schedule')
       await expect(page.locator('[data-testid="schedule-page"]')).toBeVisible()
       
-      await page.goto('/my/groups')
-      await expect(page.locator('[data-testid="groups-page"]')).toBeVisible()
+      await page.locator('[data-testid="tab-visibility"]').click()
+      await expect(page.getByText('Мои группы')).toBeVisible()
       
       await page.goto('/my/bookings')
       await expect(page.locator('[data-testid="bookings-page"]')).toBeVisible()
+      
+      await page.goto('/users')
+      await expect(page.locator('[data-testid="users-page"]')).toBeVisible()
     })
   })
 

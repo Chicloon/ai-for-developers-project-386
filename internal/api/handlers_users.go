@@ -522,12 +522,13 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 		}
 	}
 
-	// Get booked slots - use slot_date to properly track bookings on recurring schedules
+	// Get booked slots - use slot_date to properly track bookings on recurring schedules.
+	// TO_CHAR: в Go TIME приходит как "09:00:00", а ключ слота — "09:00" (15:04), иначе IsBooked не совпадает.
 	bookedRows, err := h.pool.Query(ctx, `
-		SELECT slot_start_time
+		SELECT TO_CHAR(slot_start_time, 'HH24:MI')
 		FROM bookings
 		WHERE owner_id = $1
-		  AND slot_date = $2
+		  AND slot_date = $2::date
 		  AND status = 'active'
 	`, ownerID, date)
 	if err != nil {
@@ -596,7 +597,14 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 		}
 	}
 
-	return slots, nil
+	// В списке для бронирования только свободные слоты
+	var available []models.Slot
+	for _, s := range slots {
+		if !s.IsBooked {
+			available = append(available, s)
+		}
+	}
+	return available, nil
 }
 
 // getAvailableDatesForMonth returns all dates in a range that have available slots
