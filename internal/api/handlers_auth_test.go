@@ -176,7 +176,7 @@ func TestAuthLogin_InvalidCredentials(t *testing.T) {
 	}
 
 	errResp := parseErrorResponse(t, rr)
-	if errResp.Error != "invalid email or password" {
+	if errResp.Error != "Неверный email или пароль" {
 		t.Errorf("unexpected error message: %s", errResp.Error)
 	}
 }
@@ -199,7 +199,7 @@ func TestAuthLogin_NonExistentUser(t *testing.T) {
 	}
 
 	errResp := parseErrorResponse(t, rr)
-	if errResp.Error != "invalid email or password" {
+	if errResp.Error != "Неверный email или пароль" {
 		t.Errorf("unexpected error message: %s", errResp.Error)
 	}
 }

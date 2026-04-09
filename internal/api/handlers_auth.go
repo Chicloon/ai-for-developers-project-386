@@ -126,7 +126,7 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 		if err == pgx.ErrNoRows {
 			// Run dummy bcrypt to prevent timing attacks
 			auth.CheckPassword("dummy", "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
-			jsonError(w, http.StatusUnauthorized, "invalid email or password")
+			jsonError(w, http.StatusUnauthorized, "Неверный email или пароль")
 			return
 		}
 		jsonError(w, http.StatusInternalServerError, "database error")
@@ -135,7 +135,7 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 
 	// Check password
 	if !auth.CheckPassword(req.Password, passwordHash) {
-		jsonError(w, http.StatusUnauthorized, "invalid email or password")
+		jsonError(w, http.StatusUnauthorized, "Неверный email или пароль")
 		return
 	}
 

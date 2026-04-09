@@ -65,14 +65,14 @@ test.describe('Authentication', () => {
       await loginPage.goto()
       await loginPage.login(testUser.email, 'wrongpassword')
       
-      await loginPage.expectError('invalid email or password')
+      await loginPage.expectError('Неверный email или пароль')
     })
 
     test('should show error for non-existent user', async ({ loginPage }) => {
       await loginPage.goto()
       await loginPage.login('nonexistent@test.com', 'password123')
       
-      await loginPage.expectError('invalid email or password')
+      await loginPage.expectError('Неверный email или пароль')
     })
 
     test('should navigate to register page', async ({ loginPage, registerPage }) => {
