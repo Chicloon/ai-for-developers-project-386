@@ -2,9 +2,21 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { Schedule, ScheduleEventData } from "@mantine/schedule";
-import { Modal, Title, Stack, Text, Button, Group, Loader, Center, Badge, Divider } from "@mantine/core";
+import {
+  Modal,
+  Title,
+  Stack,
+  Text,
+  Button,
+  Group,
+  Loader,
+  Center,
+  Badge,
+  Divider,
+  Tooltip,
+} from "@mantine/core";
 import { DatesProvider } from "@mantine/dates";
 import { Booking, getMyBookings, cancelBooking } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -107,9 +119,18 @@ function BookingEvent({
   event: ScheduleEventData;
 }) {
   return (
-    <Text size="sm" fw={500} truncate>
-      {event.title}
-    </Text>
+    <Tooltip label={event.title} openDelay={400} position="top" withArrow>
+      <Text
+        component="span"
+        size="sm"
+        fw={600}
+        truncate
+        inherit
+        style={{ lineHeight: 1.3, display: "block" }}
+      >
+        {event.title}
+      </Text>
+    </Tooltip>
   );
 }
 
@@ -209,6 +230,8 @@ export default function MyBookingsPage() {
   };
   const [date, setDate] = useState<Date>(new Date());
   const scheduleRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
 
   useEffect(() => {
     loadData();
@@ -245,6 +268,15 @@ export default function MyBookingsPage() {
       setModalOpened(true);
     }
   };
+
+  /** В месячном виде клик по числу дня открывает неделю с этой датой. */
+  const handleDayClick = useCallback((dateStr: string) => {
+    if (viewRef.current !== "month") return;
+    const d = dayjs(dateStr, "YYYY-MM-DD", true);
+    if (!d.isValid()) return;
+    setDate(d.toDate());
+    setView("week");
+  }, []);
 
   const handleCloseModal = () => {
     setModalOpened(false);
@@ -333,7 +365,7 @@ export default function MyBookingsPage() {
         </Text>
       )}
 
-      <div ref={scheduleRef}>
+      <div ref={scheduleRef} className="bookings-schedule-wrap">
         <DatesProvider settings={{ locale: "ru" }}>
           <Schedule
             events={events}
@@ -341,6 +373,7 @@ export default function MyBookingsPage() {
             onViewChange={handleViewChange}
             date={date}
             onDateChange={(newDate) => setDate(new Date(newDate))}
+            onDayClick={handleDayClick}
             onEventClick={handleEventClick}
             renderEventBody={(event) => (
               <BookingEvent event={event} />
@@ -379,7 +412,52 @@ export default function MyBookingsPage() {
             monthViewProps={{
               withWeekNumbers: true,
               firstDayOfWeek: 1,
-              maxEventsPerDay: 10,
+              maxEventsPerDay: 5,
+              consistentWeeks: false,
+              styles: {
+                monthViewDay: {
+                  height: "calc(52px + var(--month-view-max-events, 2) * 28px)",
+                  padding: "4px",
+                  minHeight: 0,
+                },
+                monthViewWeekday: {
+                  height: "calc(1.5rem * var(--mantine-scale))",
+                  fontSize: "var(--mantine-font-size-xs)",
+                },
+                monthViewWeekNumber: {
+                  fontSize: "var(--mantine-font-size-xs)",
+                  padding: "2px",
+                },
+                monthViewDayLabel: {
+                  fontSize: "var(--mantine-font-size-xs)",
+                },
+              },
+            }}
+            yearViewProps={{
+              withWeekNumbers: true,
+              firstDayOfWeek: 1,
+              styles: {
+                yearViewMonths: {
+                  gap: "var(--mantine-spacing-xs)",
+                },
+                yearViewMonth: {
+                  padding: "var(--mantine-spacing-xs)",
+                },
+                yearViewMonthCaption: {
+                  paddingInline: "var(--mantine-spacing-xs)",
+                  paddingBlock: "calc(0.125rem * var(--mantine-scale))",
+                  marginBottom: "calc(0.125rem * var(--mantine-scale))",
+                  fontSize: "var(--mantine-font-size-xs)",
+                },
+                yearViewWeekday: {
+                  height: "calc(1.25rem * var(--mantine-scale))",
+                  fontSize: "calc(0.625rem * var(--mantine-scale))",
+                },
+                yearViewDay: {
+                  padding: "calc(0.125rem * var(--mantine-scale))",
+                  fontSize: "var(--mantine-font-size-xs)",
+                },
+              },
             }}
           />
         </DatesProvider>

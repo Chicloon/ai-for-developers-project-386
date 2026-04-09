@@ -149,6 +149,16 @@ body {
   color: var(--text-secondary);
 }
 
+/* «Мои бронирования»: компактный месячный календарь + прокрутка в пределах экрана */
+.bookings-schedule-wrap {
+  max-height: min(72vh, 880px);
+  overflow: auto;
+}
+
+.bookings-schedule-wrap [view="month"] {
+  --min-day-width: calc(3.25rem * var(--mantine-scale));
+}
+
 /* ============================================
    Button Styles & Hover Effects
    ============================================ */
