@@ -444,6 +444,94 @@ func TestUsersSlots_BookedSlot(t *testing.T) {
 	}
 }
 
+func TestAvailableUsers_ReturnsAllUsers(t *testing.T) {
+	pool := setupTestDB(t)
+	defer pool.Close()
+	defer cleanupTestData(t, pool)
+
+	router := NewRouter(pool)
+	ctx := context.Background()
+
+	// Create current user
+	currentEmail := "current@example.com"
+	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentToken := getAuthToken(currentUserID, currentEmail)
+
+	// Create public user
+	publicUserEmail := "public@example.com"
+	publicUserID := createTestUser(t, pool, publicUserEmail, "password123", "Public User")
+	_, _ = pool.Exec(ctx, "UPDATE users SET is_public = true WHERE id = $1", publicUserID)
+
+	// Create private user (not public, not in any group)
+	privateUserEmail := "private@example.com"
+	_ = createTestUser(t, pool, privateUserEmail, "password123", "Private User")
+
+	// Create another private user
+	privateUserEmail2 := "private2@example.com"
+	_ = createTestUser(t, pool, privateUserEmail2, "password123", "Private User 2")
+
+	rr := makeRequest(router, "GET", "/api/my/available-users", nil, currentToken)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string][]models.User
+	parseResponse(t, rr, &resp)
+
+	// Should see all users except self (public and private)
+	foundPublic := false
+	foundPrivate := false
+	foundPrivate2 := false
+	foundSelf := false
+
+	for _, u := range resp["users"] {
+		if u.ID == publicUserID {
+			foundPublic = true
+		}
+		if u.Email == privateUserEmail {
+			foundPrivate = true
+		}
+		if u.Email == privateUserEmail2 {
+			foundPrivate2 = true
+		}
+		if u.ID == currentUserID {
+			foundSelf = true
+		}
+	}
+
+	if !foundPublic {
+		t.Error("expected to find public user")
+	}
+	if !foundPrivate {
+		t.Error("expected to find private user")
+	}
+	if !foundPrivate2 {
+		t.Error("expected to find private user 2")
+	}
+	if foundSelf {
+		t.Error("should not see self in list")
+	}
+
+	// Should have exactly 3 users (all except current)
+	if len(resp["users"]) != 3 {
+		t.Errorf("expected 3 users, got %d", len(resp["users"]))
+	}
+}
+
+func TestAvailableUsers_Unauthorized(t *testing.T) {
+	pool := setupTestDB(t)
+	defer pool.Close()
+
+	router := NewRouter(pool)
+
+	rr := makeRequest(router, "GET", "/api/my/available-users", nil, "")
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", rr.Code)
+	}
+}
+
 // SetSecret is needed for tests
 func init() {
 	auth.SetSecret("test-secret-key-minimum-32-characters-long-for-testing-only")

@@ -43,7 +43,7 @@ import {
   removeGroupMember,
   getMe,
   updateMe,
-  getUsers,
+  getAvailableUsers,
   CreateScheduleRequest,
 } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -201,7 +201,7 @@ export default function MySchedulePage() {
     setSelectedGroupId(groupId);
     setMemberEmail("");
     try {
-      const usersData = await getUsers();
+      const usersData = await getAvailableUsers();
       setAvailableUsers(usersData.users);
     } catch (e) {
       console.error("Failed to load users:", e);

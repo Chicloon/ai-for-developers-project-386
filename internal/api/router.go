@@ -49,10 +49,17 @@ func NewRouter(pool *pgxpool.Pool) *chi.Mux {
 
 	// Protected routes (JWT required)
 	r.Route("/api", func(r chi.Router) {
+		r.Use(auth.Middleware)
 		r.Mount("/users", usersRouter(pool))
 		r.Mount("/my/schedules", schedulesRouter(pool))
 		r.Mount("/my/groups", groupsRouter(pool))
 		r.Mount("/my/bookings", bookingsRouter(pool))
+
+		// Available users for group member addition (all users except current)
+		r.Get("/my/available-users", func(w http.ResponseWriter, r *http.Request) {
+			h := &usersHandler{pool: pool}
+			h.availableUsers(w, r)
+		})
 	})
 
 	// Route for current user profile updates

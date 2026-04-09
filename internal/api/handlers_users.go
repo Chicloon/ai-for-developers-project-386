@@ -30,7 +30,7 @@ func usersRouter(pool *pgxpool.Pool) http.Handler {
 	return r
 }
 
-// list returns users visible to current user
+// list returns users visible to current user (public or group members)
 func (h *usersHandler) list(w http.ResponseWriter, r *http.Request) {
 	currentUserID := auth.GetUserID(r.Context())
 
@@ -44,6 +44,41 @@ func (h *usersHandler) list(w http.ResponseWriter, r *http.Request) {
 			OR gm.member_id IS NOT NULL
 		  )
 		ORDER BY u.name
+	`
+
+	rows, err := h.pool.Query(r.Context(), query, currentUserID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		if err := rows.Scan(&user.ID, &user.Email, &user.Name, &user.IsPublic); err != nil {
+			jsonError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		users = append(users, user)
+	}
+
+	if users == nil {
+		users = []models.User{}
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]interface{}{"users": users})
+}
+
+// availableUsers returns all registered users except current user
+// Used for adding members to groups (no visibility restrictions)
+func (h *usersHandler) availableUsers(w http.ResponseWriter, r *http.Request) {
+	currentUserID := auth.GetUserID(r.Context())
+
+	query := `
+		SELECT id, email, name, is_public FROM users
+		WHERE id != $1
+		ORDER BY name
 	`
 
 	rows, err := h.pool.Query(r.Context(), query, currentUserID)
@@ -236,7 +271,6 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 		memberGroupIDs[gid] = true
 	}
 
-
 	// Get schedules for the date with visibility filtering
 	// A schedule is visible if:
 	// 1. It has no group associations (general schedule) AND user is member of at least one of owner's groups
@@ -275,7 +309,7 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 	var allSchedules []schedule
 	var groupSchedules []schedule
 	var generalSchedules []schedule
-	
+
 	for rows.Next() {
 		var s schedule
 		var groupIDs []string
@@ -284,7 +318,7 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 		}
 		s.groupIDs = filterEmptyUUIDs(groupIDs)
 		allSchedules = append(allSchedules, s)
-		
+
 		// Separate into group and general schedules
 		if len(s.groupIDs) > 0 {
 			groupSchedules = append(groupSchedules, s)
@@ -292,7 +326,7 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 			generalSchedules = append(generalSchedules, s)
 		}
 	}
-	
+
 	// Build time ranges covered by ALL group schedules (for exclusion of general slots)
 	type timeRange struct {
 		start time.Time
@@ -310,7 +344,7 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 
 	// Determine which schedules are visible to user
 	var visibleSchedules []schedule
-	
+
 	// Add group schedules that user has access to
 	for _, s := range groupSchedules {
 		if s.isBlocked {
@@ -328,7 +362,7 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 			visibleSchedules = append(visibleSchedules, s)
 		}
 	}
-	
+
 	// Add general schedules (slots outside group time ranges)
 	// General schedules only visible if isPublic=true
 	if isOwnerPublic {
@@ -387,7 +421,7 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 			}
 
 			slotStartStr := current.Format("15:04")
-			
+
 			// For general schedules (no groups), skip slots that fall within any group schedule time range
 			// This ensures group schedules have higher priority
 			isGeneralSchedule := len(s.groupIDs) == 0
@@ -403,7 +437,7 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 					continue
 				}
 			}
-			
+
 			slots = append(slots, models.Slot{
 				ID:        s.id + "_" + slotStartStr,
 				Date:      date,

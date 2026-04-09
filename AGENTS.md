@@ -30,7 +30,7 @@ internal/
   api/                 # HTTP handlers & chi router
     router.go          # Main router with middleware
     handlers_auth.go   # Auth handlers (register, login, me)
-    handlers_users.go  # User handlers (list, get, slots)
+    handlers_users.go  # User handlers (list, get, slots, updateMe, availableUsers)
     handlers_schedules.go  # Schedule CRUD handlers
     handlers_groups.go     # Group member handlers (fixed groups — no CRUD for groups)
     handlers_bookings.go   # Booking handlers
@@ -98,7 +98,13 @@ Groups are automatically created for each user on registration. Users cannot cre
 - `POST /api/my/groups/{id}/members` — Add member by email
 - `DELETE /api/my/groups/{id}/members/{memberId}` — Remove member
 
-### User Profile API
+### Available Users API
+- `GET /api/my/available-users` — List all registered users (except current user), for group member addition. No visibility filtering.
+
+### Users API
+- `GET /api/users` — List users visible to current user (public or group members)
+- `GET /api/users/{id}` — Get user profile
+- `GET /api/users/{id}/slots` — Get available slots for a user
 - `PUT /api/users/me` — Update current user profile (`isPublic`, `name`)
 
 ### Database Schema

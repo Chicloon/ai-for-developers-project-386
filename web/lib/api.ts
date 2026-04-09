@@ -218,6 +218,12 @@ export async function getUsers(): Promise<UsersListResponse> {
   return res.json();
 }
 
+export async function getAvailableUsers(): Promise<UsersListResponse> {
+  const res = await authFetch("/api/my/available-users");
+  if (!res.ok) throw new Error("Failed to fetch available users");
+  return res.json();
+}
+
 export async function getUser(id: string): Promise<User> {
   const res = await authFetch(`/api/users/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error("Failed to fetch user");
