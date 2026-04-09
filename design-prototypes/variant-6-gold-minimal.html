@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вариант 6 - Золотистый Минимализм</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        
+        .login-page {
+            min-height: 100vh;
+            background: #FFFBF5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: 16px;
+            padding: 48px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            border: 1px solid #F0E6D8;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .logo-icon {
+            width: 56px;
+            height: 56px;
+            background: #D4A853;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 16px;
+        }
+        
+        .logo h1 {
+            font-size: 24px;
+            color: #2C2416;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+        
+        .logo p {
+            color: #8B7355;
+            font-size: 14px;
+            margin-top: 6px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #5C4D3C;
+            margin-bottom: 6px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #E8DED0;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: all 0.2s;
+            background: white;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #D4A853;
+            box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.1);
+        }
+        
+        .btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: #D4A853;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 8px;
+        }
+        
+        .btn-primary:hover {
+            background: #C49A4A;
+        }
+        
+        .form-footer {
+            text-align: center;
+            margin-top: 24px;
+            color: #8B7355;
+            font-size: 14px;
+        }
+        
+        .form-footer a {
+            color: #D4A853;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .users-page {
+            min-height: 100vh;
+            background: #FFFBF5;
+            padding: 48px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .page-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        
+        .page-header h2 {
+            font-size: 32px;
+            color: #2C2416;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        
+        .page-header p {
+            color: #8B7355;
+            font-size: 16px;
+        }
+        
+        .search-bar {
+            max-width: 480px;
+            margin: 0 auto 40px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 14px 20px;
+            border: 1px solid #E8DED0;
+            border-radius: 8px;
+            font-size: 15px;
+            background: white;
+            transition: all 0.2s;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #D4A853;
+            box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.1);
+        }
+        
+        .users-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        
+        .user-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #F0E6D8;
+            transition: all 0.2s;
+        }
+        
+        .user-card:hover {
+            border-color: #D4A853;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .user-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .user-avatar {
+            width: 48px;
+            height: 48px;
+            background: #D4A853;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .user-meta h3 {
+            font-size: 16px;
+            color: #2C2416;
+            margin-bottom: 2px;
+            font-weight: 600;
+        }
+        
+        .user-meta p {
+            color: #8B7355;
+            font-size: 13px;
+        }
+        
+        .user-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(76, 175, 80, 0.08);
+            color: #4CAF50;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+        
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            background: #4CAF50;
+            border-radius: 50%;
+        }
+        
+        .btn-book {
+            width: 100%;
+            padding: 12px;
+            background: #D4A853;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-book:hover {
+            background: #C49A4A;
+        }
+        
+        .profile-page {
+            min-height: 100vh;
+            background: #FFFBF5;
+            padding: 48px 20px;
+        }
+        
+        .profile-header {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 32px;
+            border: 1px solid #F0E6D8;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+        
+        .profile-avatar {
+            width: 80px;
+            height: 80px;
+            background: #D4A853;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .profile-info h2 {
+            font-size: 24px;
+            color: #2C2416;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        
+        .profile-info p {
+            color: #8B7355;
+            font-size: 14px;
+        }
+        
+        .profile-tags {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .tag {
+            padding: 4px 12px;
+            background: #F5EFE6;
+            color: #8B7355;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .calendar-section {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            border: 1px solid #F0E6D8;
+        }
+        
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .calendar-header h3 {
+            font-size: 18px;
+            color: #2C2416;
+            font-weight: 600;
+        }
+        
+        .calendar-nav {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .calendar-nav button {
+            padding: 8px 16px;
+            border: 1px solid #E8DED0;
+            background: white;
+            border-radius: 6px;
+            color: #5C4D3C;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        
+        .calendar-nav button:hover {
+            border-color: #D4A853;
+            color: #D4A853;
+        }
+        
+        .slots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 12px;
+        }
+        
+        .slot {
+            padding: 14px;
+            background: white;
+            border: 1px solid #E8DED0;
+            border-radius: 6px;
+            text-align: center;
+            color: #5C4D3C;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .slot:hover {
+            background: #D4A853;
+            color: white;
+            border-color: #D4A853;
+        }
+        
+        .slot.booked {
+            background: #F5F5F5;
+            border-color: #E0E0E0;
+            color: #AAA;
+            cursor: not-allowed;
+        }
+        
+        .dashboard-page {
+            min-height: 100vh;
+            background: #FFFBF5;
+            padding: 48px 20px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 32px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            height: fit-content;
+            border: 1px solid #F0E6D8;
+        }
+        
+        .sidebar-header {
+            padding-bottom: 16px;
+            border-bottom: 1px solid #F0E6D8;
+            margin-bottom: 16px;
+        }
+        
+        .sidebar-header h3 {
+            color: #2C2416;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 6px;
+            color: #5C4D3C;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+        
+        .nav-item:hover, .nav-item.active {
+            background: #F5EFE6;
+            color: #D4A853;
+        }
+        
+        .main-content h2 {
+            font-size: 24px;
+            color: #2C2416;
+            margin-bottom: 24px;
+            font-weight: 600;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #F0E6D8;
+        }
+        
+        .stat-value {
+            font-size: 28px;
+            font-weight: 600;
+            color: #D4A853;
+            margin-bottom: 4px;
+        }
+        
+        .stat-label {
+            color: #8B7355;
+            font-size: 13px;
+        }
+        
+        .bookings-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #F0E6D8;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            color: #2C2416;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        
+        .booking-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: #FFFBF5;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+        
+        .booking-item:hover {
+            background: #F5EFE6;
+        }
+        
+        .booking-info h4 {
+            color: #2C2416;
+            font-size: 14px;
+            margin-bottom: 2px;
+            font-weight: 600;
+        }
+        
+        .booking-info p {
+            color: #8B7355;
+            font-size: 13px;
+        }
+        
+        .booking-status {
+            padding: 6px 12px;
+            background: rgba(76, 175, 80, 0.08);
+            color: #4CAF50;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .section-divider {
+            height: 80px;
+            background: linear-gradient(90deg, transparent, rgba(212, 168, 83, 0.2), transparent);
+            margin: 48px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #D4A853;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-container">
+            <div class="logo">
+                <div class="logo-icon">✦</div>
+                <h1>CallBooking</h1>
+                <p>Золотистый минимализм</p>
+            </div>
+            <form>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Пароль</label>
+                    <input type="password" class="form-input" placeholder="Пароль">
+                </div>
+                <button type="submit" class="btn-primary">Войти</button>
+            </form>
+            <div class="form-footer">
+                Нет аккаунта? <a href="#">Регистрация</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-divider">Каталог пользователей</div>
+
+    <div class="users-page">
+        <div class="container">
+            <div class="page-header">
+                <h2>Пользователи</h2>
+                <p>Доступные для бронирования</p>
+            </div>
+            <div class="search-bar">
+                <input type="text" class="search-input" placeholder="Поиск...">
+            </div>
+            <div class="users-grid">
+                <div class="user-card">
+                    <div class="user-header">
+                        <div class="user-avatar">АК</div>
+                        <div class="user-meta">
+                            <h3>Анна Коновалова</h3>
+                            <p>anna@example.com</p>
+                        </div>
+                    </div>
+                    <div class="user-status-badge">
+                        <span class="status-dot"></span>
+                        Доступен
+                    </div>
+                    <button class="btn-book">Забронировать</button>
+                </div>
+                <div class="user-card">
+                    <div class="user-header">
+                        <div class="user-avatar">МП</div>
+                        <div class="user-meta">
+                            <h3>Михаил Петров</h3>
+                            <p>mike@example.com</p>
+                        </div>
+                    </div>
+                    <div class="user-status-badge">
+                        <span class="status-dot"></span>
+                        Доступен
+                    </div>
+                    <button class="btn-book">Забронировать</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-divider">Профиль с календарем</div>
+
+    <div class="profile-page">
+        <div class="container">
+            <div class="profile-header">
+                <div class="profile-avatar">АК</div>
+                <div class="profile-info">
+                    <h2>Анна Коновалова</h2>
+                    <p>anna@example.com</p>
+                    <div class="profile-tags">
+                        <span class="tag">Семья</span>
+                        <span class="tag">Работа</span>
+                    </div>
+                </div>
+            </div>
+            <div class="calendar-section">
+                <div class="calendar-header">
+                    <h3>Доступные слоты</h3>
+                    <div class="calendar-nav">
+                        <button>Назад</button>
+                        <button>Сегодня</button>
+                        <button>Вперед</button>
+                    </div>
+                </div>
+                <div class="slots-grid">
+                    <div class="slot">10:00</div>
+                    <div class="slot">10:30</div>
+                    <div class="slot booked">11:00</div>
+                    <div class="slot">11:30</div>
+                    <div class="slot">14:00</div>
+                    <div class="slot">14:30</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-divider">Личный кабинет</div>
+
+    <div class="dashboard-page">
+        <div class="dashboard-grid">
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h3>Меню</h3>
+                </div>
+                <div class="nav-item active">Бронирования</div>
+                <div class="nav-item">Расписание</div>
+                <div class="nav-item">Группы</div>
+                <div class="nav-item">Настройки</div>
+            </aside>
+            <main class="main-content">
+                <h2>Мои бронирования</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">5</div>
+                        <div class="stat-label">Предстоящих</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">28</div>
+                        <div class="stat-label">Завершено</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">12</div>
+                        <div class="stat-label">Контактов</div>
+                    </div>
+                </div>
+                <div class="bookings-section">
+                    <h3 class="section-title">Предстоящие звонки</h3>
+                    <div class="booking-item">
+                        <div class="booking-info">
+                            <h4>Звонок с Михаилом</h4>
+                            <p>Сегодня, 15:00</p>
+                        </div>
+                        <span class="booking-status">Подтверждено</span>
+                    </div>
+                    <div class="booking-item">
+                        <div class="booking-info">
+                            <h4>Встреча с Еленой</h4>
+                            <p>Завтра, 10:00</p>
+                        </div>
+                        <span class="booking-status">Подтверждено</span>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+</body>
+</html>

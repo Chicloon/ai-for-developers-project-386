@@ -25,7 +25,7 @@ import {
   Tabs,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { TimeInput } from "@mantine/dates";
+import { TimePicker } from "@mantine/dates";
 import { IconTrash, IconEdit, IconUserPlus, IconInfoCircle } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import {
@@ -67,6 +67,23 @@ function formatTime(timeStr: string): string {
   // Has seconds - parse and format
   const parsed = dayjs(timeStr, "HH:mm:ss");
   return parsed.isValid() ? parsed.format("HH:mm") : timeStr;
+}
+
+/** TimePicker value is HH:mm; API returns HH:mm:ss from Postgres. */
+function toTimeInputValue(timeStr: string): string {
+  if (!timeStr) return "";
+  const parts = timeStr.split(":");
+  if (parts.length < 2) return timeStr;
+  const h = parts[0].padStart(2, "0");
+  const m = parts[1].padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+/** Normalize API date to YYYY-MM-DD for <input type="date">. */
+function toDateInputValue(dateStr: string | undefined | null): string {
+  if (!dateStr) return "";
+  const m = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : dateStr.slice(0, 10);
 }
 
 // Fixed group order and display info
@@ -220,9 +237,9 @@ export default function MySchedulePage() {
     setEditingScheduleId(schedule.id);
     setType(schedule.type);
     setDayOfWeek(schedule.dayOfWeek?.toString() || "1");
-    setDate(schedule.date || "");
-    setStartTime(schedule.startTime);
-    setEndTime(schedule.endTime);
+    setDate(toDateInputValue(schedule.date));
+    setStartTime(toTimeInputValue(schedule.startTime));
+    setEndTime(toTimeInputValue(schedule.endTime));
     setIsBlocked(schedule.isBlocked);
     setSelectedGroupIds(schedule.groupIds || []);
     openScheduleModal();
@@ -555,16 +572,18 @@ export default function MySchedulePage() {
           )}
 
           <Group grow>
-            <TimeInput
+            <TimePicker
               label="Начало"
               value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
+              onChange={setStartTime}
+              format="24h"
               data-testid="schedule-start-time"
             />
-            <TimeInput
+            <TimePicker
               label="Конец"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
+              onChange={setEndTime}
+              format="24h"
               data-testid="schedule-end-time"
             />
           </Group>

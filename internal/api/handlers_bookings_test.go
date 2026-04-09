@@ -522,6 +522,50 @@ func TestBookingsCancel_AsOwner(t *testing.T) {
 	}
 }
 
+func TestBookingsCancel_PastSlot(t *testing.T) {
+	pool := setupTestDB(t)
+	defer pool.Close()
+	defer cleanupTestData(t, pool)
+
+	router := NewRouter(pool)
+	ctx := context.Background()
+
+	bookerEmail := "bookerpast@example.com"
+	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerToken := getAuthToken(bookerID, bookerEmail)
+
+	ownerEmail := "ownerpast@example.com"
+	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
+	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+
+	var scheduleID string
+	dayOfWeek := int32(1)
+	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	if err != nil {
+		t.Fatalf("failed to create schedule: %v", err)
+	}
+
+	var bookingID string
+	err = pool.QueryRow(ctx,
+		`INSERT INTO bookings (schedule_id, booker_id, owner_id, status, slot_date, slot_start_time)
+		 VALUES ($1, $2, $3, 'active', '2000-01-01', '10:00:00') RETURNING id`,
+		scheduleID, bookerID, ownerID).Scan(&bookingID)
+	if err != nil {
+		t.Fatalf("failed to create booking: %v", err)
+	}
+
+	rr := makeRequest(router, "DELETE", "/api/my/bookings/"+bookingID, nil, bookerToken)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	errResp := parseErrorResponse(t, rr)
+	if errResp.Error != "cannot cancel a past booking" {
+		t.Errorf("unexpected error message: %s", errResp.Error)
+	}
+}
+
 func TestBookingsCancel_NotFound(t *testing.T) {
 	pool := setupTestDB(t)
 	defer pool.Close()

@@ -15,6 +15,14 @@ tsp-output/
 *.test
 vendor/
 
+# TLS keys (положите fullchain.pem + privkey.pem или см. scripts/mk-dev-ssl.sh)
+ssl/*
+!ssl/.gitkeep
+
+# Let's Encrypt webroot (временные challenge-файлы)
+certbot/www/*
+!certbot/www/.gitkeep
+
 # Environment
 .env
 web/.env.local

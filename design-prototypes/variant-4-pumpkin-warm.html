@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вариант 4 - Тыквенный Тёплый</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        
+        /* ===== СТРАНИЦА ВХОДА ===== */
+        .login-page {
+            min-height: 100vh;
+            background: #FDF6E3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            position: relative;
+        }
+        
+        .login-page::before {
+            content: '🎃';
+            position: absolute;
+            font-size: 400px;
+            opacity: 0.03;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: 32px;
+            padding: 60px;
+            width: 100%;
+            max-width: 460px;
+            box-shadow: 
+                0 20px 60px rgba(210, 105, 30, 0.15),
+                0 0 0 1px rgba(210, 105, 30, 0.1);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 44px;
+        }
+        
+        .logo-icon {
+            width: 88px;
+            height: 88px;
+            background: linear-gradient(145deg, #E67E22 0%, #D35400 100%);
+            border-radius: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin-bottom: 20px;
+            box-shadow: 
+                0 12px 30px rgba(211, 84, 0, 0.3),
+                inset 0 -4px 0 rgba(0, 0, 0, 0.1);
+        }
+        
+        .logo h1 {
+            font-size: 34px;
+            color: #2C1810;
+            font-weight: 800;
+        }
+        
+        .logo p {
+            color: #A0522D;
+            font-size: 15px;
+            margin-top: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 26px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 700;
+            color: #8B4513;
+            margin-bottom: 10px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 18px 22px;
+            border: 3px solid #F5E6D3;
+            border-radius: 16px;
+            font-size: 16px;
+            transition: all 0.25s;
+            background: #FFFCF8;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #E67E22;
+            box-shadow: 0 0 0 5px rgba(230, 126, 34, 0.1);
+            background: white;
+        }
+        
+        .btn-primary {
+            width: 100%;
+            padding: 20px;
+            background: linear-gradient(145deg, #E67E22 0%, #D35400 100%);
+            color: white;
+            border: none;
+            border-radius: 16px;
+            font-size: 17px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.25s;
+            box-shadow: 
+                0 6px 20px rgba(211, 84, 0, 0.35),
+                inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+            margin-top: 10px;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 
+                0 10px 30px rgba(211, 84, 0, 0.45),
+                inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+        }
+        
+        .form-footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #A0522D;
+            font-size: 15px;
+        }
+        
+        .form-footer a {
+            color: #D35400;
+            text-decoration: none;
+            font-weight: 800;
+        }
+        
+        /* ===== КАТАЛОГ ПОЛЬЗОВАТЕЛЕЙ ===== */
+        .users-page {
+            min-height: 100vh;
+            background: #FDF6E3;
+            padding: 60px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .page-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        
+        .page-header h2 {
+            font-size: 44px;
+            color: #2C1810;
+            margin-bottom: 16px;
+            font-weight: 800;
+        }
+        
+        .page-header p {
+            color: #A0522D;
+            font-size: 18px;
+        }
+        
+        .search-bar {
+            max-width: 620px;
+            margin: 0 auto 50px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 20px 30px;
+            border: 3px solid #F5E6D3;
+            border-radius: 50px;
+            font-size: 17px;
+            background: white;
+            box-shadow: 0 4px 20px rgba(210, 105, 30, 0.08);
+            transition: all 0.25s;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #E67E22;
+            box-shadow: 0 6px 30px rgba(230, 126, 34, 0.15);
+        }
+        
+        .users-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 32px;
+        }
+        
+        .user-card {
+            background: white;
+            border-radius: 28px;
+            padding: 36px;
+            border: 3px solid #F5E6D3;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .user-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 24px 60px rgba(210, 105, 30, 0.15);
+            border-color: #E67E22;
+        }
+        
+        .user-avatar {
+            width: 84px;
+            height: 84px;
+            background: linear-gradient(145deg, #F4A460 0%, #E67E22 100%);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: white;
+            margin-bottom: 24px;
+            font-weight: 700;
+            box-shadow: 0 10px 30px rgba(230, 126, 34, 0.3);
+        }
+        
+        .user-name {
+            font-size: 24px;
+            font-weight: 800;
+            color: #2C1810;
+            margin-bottom: 8px;
+        }
+        
+        .user-email {
+            color: #A0522D;
+            font-size: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .user-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .user-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 18px;
+            background: rgba(76, 175, 80, 0.1);
+            color: #4CAF50;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        
+        .user-status::before {
+            content: '';
+            width: 10px;
+            height: 10px;
+            background: #4CAF50;
+            border-radius: 50%;
+        }
+        
+        .btn-book {
+            padding: 14px 28px;
+            background: linear-gradient(145deg, #E67E22 0%, #D35400 100%);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.25s;
+            box-shadow: 0 4px 16px rgba(211, 84, 0, 0.3);
+        }
+        
+        .btn-book:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 24px rgba(211, 84, 0, 0.4);
+        }
+        
+        /* ===== ПРОФИЛЬ С КАЛЕНДАРЁМ ===== */
+        .profile-page {
+            min-height: 100vh;
+            background: #FDF6E3;
+            padding: 60px 20px;
+        }
+        
+        .profile-header {
+            background: white;
+            border-radius: 32px;
+            padding: 48px;
+            margin-bottom: 40px;
+            box-shadow: 0 12px 40px rgba(210, 105, 30, 0.1);
+            border: 3px solid #F5E6D3;
+            display: flex;
+            align-items: center;
+            gap: 40px;
+        }
+        
+        .profile-avatar {
+            width: 150px;
+            height: 150px;
+            background: linear-gradient(145deg, #E67E22 0%, #D35400 100%);
+            border-radius: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            color: white;
+            font-weight: 800;
+            box-shadow: 0 16px 40px rgba(211, 84, 0, 0.35);
+        }
+        
+        .profile-info h2 {
+            font-size: 38px;
+            color: #2C1810;
+            margin-bottom: 12px;
+            font-weight: 800;
+        }
+        
+        .profile-info p {
+            color: #A0522D;
+            font-size: 18px;
+        }
+        
+        .calendar-section {
+            background: white;
+            border-radius: 32px;
+            padding: 44px;
+            box-shadow: 0 12px 40px rgba(210, 105, 30, 0.1);
+            border: 3px solid #F5E6D3;
+        }
+        
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 44px;
+        }
+        
+        .calendar-header h3 {
+            font-size: 28px;
+            color: #2C1810;
+            font-weight: 800;
+        }
+        
+        .calendar-nav {
+            display: flex;
+            gap: 16px;
+        }
+        
+        .calendar-nav button {
+            padding: 14px 26px;
+            border: 3px solid #F5E6D3;
+            background: white;
+            border-radius: 14px;
+            color: #A0522D;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s;
+            font-size: 15px;
+        }
+        
+        .calendar-nav button:hover {
+            border-color: #E67E22;
+            color: #D35400;
+            background: #FFFCF8;
+        }
+        
+        .slots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 18px;
+        }
+        
+        .slot {
+            padding: 22px;
+            background: #FFFCF8;
+            border: 3px solid #F5E6D3;
+            border-radius: 16px;
+            text-align: center;
+            color: #6B4423;
+            font-weight: 700;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+        
+        .slot:hover {
+            background: linear-gradient(145deg, #E67E22 0%, #D35400 100%);
+            color: white;
+            border-color: #D35400;
+            transform: scale(1.08);
+            box-shadow: 0 8px 24px rgba(211, 84, 0, 0.35);
+        }
+        
+        .slot.booked {
+            background: #F5F5F0;
+            border-color: #E0E0D8;
+            color: #AAA;
+            cursor: not-allowed;
+        }
+        
+        /* ===== ЛИЧНЫЙ КАБИНЕТ ===== */
+        .dashboard-page {
+            min-height: 100vh;
+            background: #FDF6E3;
+            padding: 60px 20px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 44px;
+            max-width: 1480px;
+            margin: 0 auto;
+        }
+        
+        .sidebar {
+            background: white;
+            border-radius: 28px;
+            padding: 36px;
+            height: fit-content;
+            box-shadow: 0 8px 30px rgba(210, 105, 30, 0.08);
+            border: 3px solid #F5E6D3;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 18px 22px;
+            border-radius: 16px;
+            color: #6B4423;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .nav-item:hover, .nav-item.active {
+            background: linear-gradient(145deg, rgba(230, 126, 34, 0.1) 0%, rgba(211, 84, 0, 0.1) 100%);
+            color: #D35400;
+        }
+        
+        .nav-item.active {
+            box-shadow: 0 4px 16px rgba(230, 126, 34, 0.15);
+        }
+        
+        .main-content h2 {
+            font-size: 36px;
+            color: #2C1810;
+            margin-bottom: 36px;
+            font-weight: 800;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 28px;
+            margin-bottom: 44px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 24px;
+            padding: 32px;
+            border: 3px solid #F5E6D3;
+            box-shadow: 0 6px 24px rgba(210, 105, 30, 0.06);
+            transition: all 0.25s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 35px rgba(210, 105, 30, 0.12);
+            border-color: #E67E22;
+        }
+        
+        .stat-value {
+            font-size: 44px;
+            font-weight: 800;
+            color: #D35400;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            color: #A0522D;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .bookings-section {
+            background: white;
+            border-radius: 28px;
+            padding: 36px;
+            border: 3px solid #F5E6D3;
+            box-shadow: 0 8px 30px rgba(210, 105, 30, 0.08);
+        }
+        
+        .section-title {
+            font-size: 22px;
+            color: #2C1810;
+            margin-bottom: 28px;
+            font-weight: 800;
+        }
+        
+        .booking-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 28px;
+            background: #FFFCF8;
+            border-radius: 20px;
+            margin-bottom: 18px;
+            border: 3px solid transparent;
+            transition: all 0.25s;
+        }
+        
+        .booking-item:hover {
+            border-color: #F5E6D3;
+            transform: translateX(6px);
+        }
+        
+        .booking-info h4 {
+            color: #2C1810;
+            font-size: 18px;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+        
+        .booking-info p {
+            color: #A0522D;
+            font-size: 15px;
+        }
+        
+        .booking-status {
+            padding: 12px 24px;
+            background: rgba(76, 175, 80, 0.1);
+            color: #4CAF50;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 800;
+        }
+        
+        .section-divider {
+            height: 100px;
+            background: linear-gradient(90deg, transparent, rgba(230, 126, 34, 0.2), transparent);
+            margin: 60px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #D35400;
+            font-weight: 800;
+        }
+    </style>
+</head>
+<body>
+    <!-- СТРАНИЦА ВХОДА -->
+    <div class="login-page">
+        <div class="login-container">
+            <div class="logo">
+                <div class="logo-icon">🎃</div>
+                <h1>CallBooking</h1>
+                <p>Тёплая тыквенная тема</p>
+            </div>
+            <form>
+                <div class="form-group">
+                    <label class="form-label">Email адрес</label>
+                    <input type="email" class="form-input" placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Пароль</label>
+                    <input type="password" class="form-input" placeholder="Ваш пароль">
+                </div>
+                <button type="submit" class="btn-primary">Войти в систему</button>
+            </form>
+            <div class="form-footer">
+                Нет аккаунта? <a href="#">Зарегистрироваться</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-divider">Каталог пользователей</div>
+
+    <!-- КАТАЛОГ ПОЛЬЗОВАТЕЛЕЙ -->
+    <div class="users-page">
+        <div class="container">
+            <div class="page-header">
+                <h2>Доступные для звонка</h2>
+                <p>Выберите человека и назначьте встречу</p>
+            </div>
+            <div class="search-bar">
+                <input type="text" class="search-input" placeholder="Поиск по имени...">
+            </div>
+            <div class="users-grid">
+                <div class="user-card">
+                    <div class="user-avatar">АК</div>
+                    <div class="user-name">Анна Коновалова</div>
+                    <div class="user-email">anna@example.com</div>
+                    <div class="user-footer">
+                        <span class="user-status">Доступен</span>
+                        <button class="btn-book">Забронировать</button>
+                    </div>
+                </div>
+                <div class="user-card">
+                    <div class="user-avatar">МП</div>
+                    <div class="user-name">Михаил Петров</div>
+                    <div class="user-email">mike@example.com</div>
+                    <div class="user-footer">
+                        <span class="user-status">Доступен</span>
+                        <button class="btn-book">Забронировать</button>
+                    </div>
+                </div>
+                <div class="user-card">
+                    <div class="user-avatar">ЕС</div>
+                    <div class="user-name">Елена Соколова</div>
+                    <div class="user-email">elena@example.com</div>
+                    <div class="user-footer">
+                        <span class="user-status">Доступен</span>
+                        <button class="btn-book">Забронировать</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-divider">Профиль с календарём</div>
+
+    <!-- ПРОФИЛЬ С КАЛЕНДАРЁМ -->
+    <div class="profile-page">
+        <div class="container">
+            <div class="profile-header">
+                <div class="profile-avatar">АК</div>
+                <div class="profile-info">
+                    <h2>Анна Коновалова</h2>
+                    <p>anna@example.com • Группа: Семья</p>
+                </div>
+            </div>
+            <div class="calendar-section">
+                <div class="calendar-header">
+                    <h3>Доступные слоты — 9 апреля 2026</h3>
+                    <div class="calendar-nav">
+                        <button>← Вчера</button>
+                        <button>Сегодня</button>
+                        <button>Завтра →</button>
+                    </div>
+                </div>
+                <div class="slots-grid">
+                    <div class="slot">10:00</div>
+                    <div class="slot">10:30</div>
+                    <div class="slot booked">11:00</div>
+                    <div class="slot">11:30</div>
+                    <div class="slot">12:00</div>
+                    <div class="slot">14:00</div>
+                    <div class="slot">14:30</div>
+                    <div class="slot booked">15:00</div>
+                    <div class="slot">15:30</div>
+                    <div class="slot">16:00</div>
+                    <div class="slot">16:30</div>
+                    <div class="slot">17:00</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-divider">Личный кабинет</div>
+
+    <!-- ЛИЧНЫЙ КАБИНЕТ -->
+    <div class="dashboard-page">
+        <div class="dashboard-grid">
+            <aside class="sidebar">
+                <div class="nav-item active">📅 Мои бронирования</div>
+                <div class="nav-item">📆 Моё расписание</div>
+                <div class="nav-item">👥 Группы доступа</div>
+                <div class="nav-item">⚙️ Настройки</div>
+                <div class="nav-item">🚪 Выйти</div>
+            </aside>
+            <main class="main-content">
+                <h2>Мои бронирования</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">12</div>
+                        <div class="stat-label">Предстоящих</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">48</div>
+                        <div class="stat-label">Завершено</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">3</div>
+                        <div class="stat-label">Отменено</div>
+                    </div>
+                </div>
+                <div class="bookings-section">
+                    <h3 class="section-title">Предстоящие звонки</h3>
+                    <div class="booking-item">
+                        <div class="booking-info">
+                            <h4>Звонок с Михаилом Петровым</h4>
+                            <p>10 апреля 2026 • 14:00 - 14:30</p>
+                        </div>
+                        <span class="booking-status">Подтверждено</span>
+                    </div>
+                    <div class="booking-item">
+                        <div class="booking-info">
+                            <h4>Звонок с Еленой Соколовой</h4>
+                            <p>11 апреля 2026 • 10:00 - 10:30</p>
+                        </div>
+                        <span class="booking-status">Подтверждено</span>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+</body>
+</html>

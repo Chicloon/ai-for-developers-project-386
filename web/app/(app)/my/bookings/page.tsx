@@ -48,6 +48,14 @@ function formatDate(dateStr: string): string {
   });
 }
 
+/** Активное бронирование, интервал которого уже закончился (по локальному времени). */
+function isBookingPast(booking: Booking): boolean {
+  if (booking.status !== "active" || !booking.date) return false;
+  const endTime = booking.endTime.split(".")[0];
+  const end = dayjs(`${booking.date} ${endTime}`, "YYYY-MM-DD HH:mm:ss", true);
+  return end.isValid() && end.isBefore(dayjs());
+}
+
 // Преобразование бронирования в событие календаря
 function bookingToEvent(booking: Booking): ScheduleEventData {
   // Для повторяющихся бронирований без даты не создаем событие календаря
@@ -79,6 +87,8 @@ function bookingToEvent(booking: Booking): ScheduleEventData {
   // Отмененные бронирования - красным
   if (booking.status === "cancelled") {
     color = "red";
+  } else if (isBookingPast(booking)) {
+    color = "gray";
   }
 
   return {
@@ -122,8 +132,18 @@ function BookingModal({
   // Используем группы из бронирования (приходят с бэкенда с названиями)
   const bookingGroups = booking.groups || [];
 
-  const canCancel = booking.status === "active" &&
+  const past = isBookingPast(booking);
+  const canCancel =
+    booking.status === "active" &&
+    !past &&
     (booking.booker.id === user?.id || booking.owner.id === user?.id);
+
+  const statusBadge =
+    booking.status === "cancelled"
+      ? { color: "red" as const, label: "Отменено" }
+      : past
+        ? { color: "gray" as const, label: "Прошедшее" }
+        : { color: "green" as const, label: "Активно" };
 
   return (
     <Modal
@@ -135,9 +155,7 @@ function BookingModal({
       <Stack gap="xs">
         <Group justify="space-between">
           <Text fw={700}>Детали</Text>
-          <Badge color={booking.status === 'active' ? 'green' : 'red'}>
-            {booking.status === 'active' ? 'Активно' : 'Отменено'}
-          </Badge>
+          <Badge color={statusBadge.color}>{statusBadge.label}</Badge>
         </Group>
 
         <Text size="sm">

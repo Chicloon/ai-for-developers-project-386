@@ -259,10 +259,15 @@ func (h *bookingsHandler) cancel(w http.ResponseWriter, r *http.Request) {
 	bookingID := chi.URLParam(r, "id")
 
 	// Verify booking exists and user has permission
-	var bookerID, ownerID string
-	err := h.pool.QueryRow(r.Context(),
-		"SELECT booker_id, owner_id FROM bookings WHERE id = $1",
-		bookingID).Scan(&bookerID, &ownerID)
+	var bookerID, ownerID, status string
+	var isPast bool
+	err := h.pool.QueryRow(r.Context(), `
+		SELECT booker_id, owner_id, status,
+			(slot_date IS NOT NULL AND slot_start_time IS NOT NULL AND
+			 (slot_date::timestamp + slot_start_time + interval '30 minutes') < NOW()
+			) AS is_past
+		FROM bookings WHERE id = $1`,
+		bookingID).Scan(&bookerID, &ownerID, &status, &isPast)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			jsonError(w, http.StatusNotFound, "booking not found")
@@ -275,6 +280,16 @@ func (h *bookingsHandler) cancel(w http.ResponseWriter, r *http.Request) {
 	// Check permission: booker or owner can cancel
 	if bookerID != userID && ownerID != userID {
 		jsonError(w, http.StatusForbidden, "you don't have permission to cancel this booking")
+		return
+	}
+
+	if status != "active" {
+		jsonError(w, http.StatusBadRequest, "booking is not active")
+		return
+	}
+
+	if isPast {
+		jsonError(w, http.StatusBadRequest, "cannot cancel a past booking")
 		return
 	}
 

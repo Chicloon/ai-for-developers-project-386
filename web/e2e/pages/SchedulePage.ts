@@ -26,6 +26,24 @@ export class SchedulePage {
     await this.loadingIndicator.waitFor({ state: 'hidden' })
   }
 
+  /** Mantine TimePicker: два поля часы/минуты; нативный type=time — одно поле. */
+  async fillScheduleTime(testId: string, value: string) {
+    const root = this.page.locator(`[data-testid="${testId}"]`)
+    const [h, m] = value.split(':')
+    const visible = root.locator('input:not([type="hidden"])')
+    if ((await visible.count()) >= 2) {
+      await visible.nth(0).fill(h)
+      await visible.nth(1).fill(m)
+      return
+    }
+    const inner = root.locator('input')
+    if ((await inner.count()) > 0) {
+      await inner.first().fill(value)
+    } else {
+      await root.fill(value)
+    }
+  }
+
   async clickAdd() {
     await this.page.locator('[data-testid="tab-schedule"]').click()
     await this.addButton.click()
@@ -73,17 +91,8 @@ export class SchedulePage {
       await this.page.getByRole('option', { name: dayNames[params.dayOfWeek] }).click()
     }
 
-    const fillTime = async (testId: string, value: string) => {
-      const root = this.page.locator(`[data-testid="${testId}"]`)
-      const inner = root.locator('input')
-      if ((await inner.count()) > 0) {
-        await inner.fill(value)
-      } else {
-        await root.fill(value)
-      }
-    }
-    await fillTime('schedule-start-time', params.startTime)
-    await fillTime('schedule-end-time', params.endTime)
+    await this.fillScheduleTime('schedule-start-time', params.startTime)
+    await this.fillScheduleTime('schedule-end-time', params.endTime)
 
     if (params.isBlocked) {
       await this.page.locator('[data-testid="schedule-blocked-checkbox"]').check()

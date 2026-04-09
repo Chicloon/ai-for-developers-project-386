@@ -110,9 +110,8 @@ test.describe('Schedule Management', () => {
     
     // Edit the schedule
     await schedulePage.editSchedule(id!)
-    const modal = schedulePage.page.locator('[data-testid="schedule-modal"]')
-    await modal.getByLabel('Начало').fill('08:00')
-    await modal.getByLabel('Конец').fill('16:00')
+    await schedulePage.fillScheduleTime('schedule-start-time', '08:00')
+    await schedulePage.fillScheduleTime('schedule-end-time', '16:00')
     await schedulePage.submitForm()
     
     // Verify updated time

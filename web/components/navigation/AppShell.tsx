@@ -4,6 +4,7 @@ import { AppShell as MantineAppShell, Burger, Group, Button, Text, Avatar, Menu,
 import { useDisclosure } from "@mantine/hooks";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [opened, { toggle }] = useDisclosure();
@@ -21,19 +22,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
             <Text component={Link} href="/" fw={700} size="lg" data-testid="app-logo">Call Booking</Text>
           </Group>
-          {user && (
-            <Menu>
-              <Menu.Target>
-                <Group gap="xs" style={{ cursor: "pointer" }} data-testid="user-menu">
-                  <Avatar size="sm" color="blue">{user.name.charAt(0).toUpperCase()}</Avatar>
-                  <Text size="sm" visibleFrom="sm" data-testid="user-name">{user.name}</Text>
-                </Group>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Item onClick={logout} color="red" data-testid="logout-button">Выйти</Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-          )}
+          <Group gap="xs">
+            <ThemeToggle />
+            {user && (
+              <Menu>
+                <Menu.Target>
+                  <Group gap="xs" style={{ cursor: "pointer" }} data-testid="user-menu">
+                    <Avatar size="sm" color="blue">{user.name.charAt(0).toUpperCase()}</Avatar>
+                    <Text size="sm" visibleFrom="sm" data-testid="user-name">{user.name}</Text>
+                  </Group>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item onClick={logout} color="red" data-testid="logout-button">Выйти</Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            )}
+          </Group>
         </Group>
       </MantineAppShell.Header>
 
