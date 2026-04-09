@@ -16,7 +16,7 @@ test.describe('Users Booking Page UX', () => {
     await page.goto('/users')
 
     await expect(page.locator('[data-testid="users-title"]')).toHaveText('Запись на встречу')
-    await expect(page.locator('text=Поиск выполняется по пользователям с публичным профилем')).toBeVisible()
+    await expect(page.locator('text=Поиск осуществляется по пользователям с публичным профилем')).toBeVisible()
     await expect(page.locator('button:has-text("Записаться на ближайшее")')).toHaveCount(0)
     await expect(page.locator('text=Шаг 1')).toBeVisible()
     await expect(page.locator('text=Шаг 2')).toBeVisible()
@@ -54,6 +54,6 @@ test.describe('Users Booking Page UX', () => {
     await selectInput.fill(owner.email)
     await page.locator(`text=${owner.email}`).first().click()
 
-    await expect(page.locator('text=Поиск выполняется по пользователям с публичным профилем')).toHaveCount(0)
+    await expect(page.locator('text=Поиск осуществляется по пользователям с публичным профилем')).toHaveCount(0)
   })
 })

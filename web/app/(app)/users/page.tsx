@@ -16,7 +16,9 @@ import {
   Text,
   Tooltip,
   Card,
+  ThemeIcon,
 } from "@mantine/core";
+import { IconInfoCircle } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { Schedule, ScheduleHeader, ScheduleEventData, ScheduleViewLevel, DateStringValue } from '@mantine/schedule';
 import { SegmentedControl } from '@mantine/core';
@@ -426,9 +428,24 @@ export default function UsersCatalogPage() {
         label="Выберите пользователя"
         placeholder="Начните вводить имя или email"
         description={
-          !selectedUserId
-            ? "Поиск выполняется по пользователям с публичным профилем и пользователям, которые состоят хотя бы в одной из ваших групп."
-            : undefined
+          !selectedUserId ? (
+            <Paper className="users-select-hint" shadow="sm" p="md" radius="md" mt={6}>
+              <Group gap="sm" align="flex-start" wrap="nowrap">
+                <ThemeIcon variant="filled" color="orange" size="lg" radius="md" aria-hidden>
+                  <IconInfoCircle size={22} stroke={1.5} />
+                </ThemeIcon>
+                <Stack gap={6} style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="sm" fw={700} className="users-select-hint-title">
+                    Кого можно найти в списке
+                  </Text>
+                  <Text size="sm" lh={1.6} fw={500} className="users-select-hint-body">
+                    Поиск осуществляется по пользователям с публичным профилем и по пользователям, у которых
+                    вы состоите в группе.
+                  </Text>
+                </Stack>
+              </Group>
+            </Paper>
+          ) : undefined
         }
         data={selectData}
         value={selectedUserId}

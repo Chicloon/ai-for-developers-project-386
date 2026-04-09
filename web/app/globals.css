@@ -124,6 +124,31 @@ body {
     0 0 30px var(--shadow-hover);
 }
 
+/* Подсказка под Select на странице записи — фон и акценты из темы (Pumpkin / Amber) */
+.mantine-Paper-root.users-select-hint {
+  background-color: var(--accent-subtle) !important;
+  border: 1px solid var(--border-color) !important;
+  border-left: 4px solid var(--primary-color) !important;
+  box-shadow: 0 2px 8px var(--shadow-color) !important;
+}
+
+[data-mantine-color-scheme="dark"] .mantine-Paper-root.users-select-hint {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.users-select-hint-title {
+  color: var(--primary-color-dark);
+}
+
+[data-mantine-color-scheme="dark"] .users-select-hint-title {
+  color: var(--primary-color);
+}
+
+.users-select-hint-body {
+  color: var(--text-secondary);
+}
+
 /* ============================================
    Button Styles & Hover Effects
    ============================================ */
