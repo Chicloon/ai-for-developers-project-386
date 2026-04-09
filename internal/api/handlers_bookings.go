@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"time"
 
 	"call-booking/internal/auth"
 	"call-booking/internal/models"
@@ -175,6 +177,16 @@ func (h *bookingsHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slotDateTime, err := parseSlotDateTime(req.SlotDate, req.SlotStartTime)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid slot date or time format")
+		return
+	}
+	if !slotDateTime.After(time.Now()) {
+		jsonError(w, http.StatusBadRequest, "cannot book a slot in the past")
+		return
+	}
+
 	// Check if user can see the owner and can book this specific schedule
 	canBook, err := h.canBookSchedule(r.Context(), userID, req.OwnerID, req.ScheduleID)
 	if err != nil {
@@ -226,6 +238,20 @@ func (h *bookingsHandler) create(w http.ResponseWriter, r *http.Request) {
 		Scan(&b.Date, &b.StartTime, &b.EndTime)
 
 	jsonResponse(w, http.StatusCreated, b)
+}
+
+func parseSlotDateTime(slotDate, slotStartTime string) (time.Time, error) {
+	layouts := []string{
+		"2006-01-02 15:04",
+		"2006-01-02 15:04:05",
+	}
+	raw := slotDate + " " + slotStartTime
+	for _, layout := range layouts {
+		if parsed, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, errors.New("invalid slot date or time format")
 }
 
 func (h *bookingsHandler) cancel(w http.ResponseWriter, r *http.Request) {

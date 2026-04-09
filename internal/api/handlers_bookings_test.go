@@ -334,6 +334,51 @@ func TestBookingsCreate_DuplicateBooking(t *testing.T) {
 	}
 }
 
+func TestBookingsCreate_PastSlot(t *testing.T) {
+	pool := setupTestDB(t)
+	defer pool.Close()
+	defer cleanupTestData(t, pool)
+
+	router := NewRouter(pool)
+	ctx := context.Background()
+
+	// Create booker user
+	bookerEmail := "bookerpast@example.com"
+	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerToken := getAuthToken(bookerID, bookerEmail)
+
+	// Create owner user with public visibility
+	ownerEmail := "ownerpast@example.com"
+	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
+	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+
+	// Create a schedule for owner
+	var scheduleID string
+	dayOfWeek := int32(1)
+	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	if err != nil {
+		t.Fatalf("failed to create schedule: %v", err)
+	}
+
+	req := models.CreateBookingRequest{
+		OwnerID:       ownerID,
+		ScheduleID:    scheduleID,
+		SlotDate:      time.Now().Add(-24 * time.Hour).Format("2006-01-02"),
+		SlotStartTime: "10:00",
+	}
+
+	rr := makeRequest(router, "POST", "/api/my/bookings", req, bookerToken)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	errResp := parseErrorResponse(t, rr)
+	if errResp.Error != "cannot book a slot in the past" {
+		t.Errorf("unexpected error message: %s", errResp.Error)
+	}
+}
+
 func TestBookingsCreate_Unauthorized(t *testing.T) {
 	pool := setupTestDB(t)
 	defer pool.Close()

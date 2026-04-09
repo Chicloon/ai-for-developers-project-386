@@ -241,6 +241,51 @@ export async function getUserSlots(
   return res.json();
 }
 
+export async function getUserSlotsRange(
+  userId: string,
+  start: string, // YYYY-MM-DD
+  end: string    // YYYY-MM-DD
+): Promise<SlotsListResponse> {
+  const res = await authFetch(
+    `/api/users/${encodeURIComponent(userId)}/slots-range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+  );
+  if (!res.ok) throw new Error("Failed to fetch user slots range");
+  return res.json();
+}
+
+// Available dates types
+export interface AvailableDate {
+  date: string;
+  availableSlots: number;
+}
+
+export interface AvailableDatesResponse {
+  dates: AvailableDate[];
+}
+
+export async function getUserAvailableDates(
+  userId: string,
+  month: string
+): Promise<AvailableDatesResponse> {
+  const res = await authFetch(
+    `/api/users/${encodeURIComponent(userId)}/available-dates?month=${encodeURIComponent(month)}`
+  );
+  if (!res.ok) throw new Error("Failed to fetch available dates");
+  return res.json();
+}
+
+export async function getUserAvailableDatesRange(
+  userId: string,
+  start: string,  // YYYY-MM-DD
+  end: string     // YYYY-MM-DD
+): Promise<AvailableDatesResponse> {
+  const res = await authFetch(
+    `/api/users/${encodeURIComponent(userId)}/available-dates-range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+  );
+  if (!res.ok) throw new Error("Failed to fetch available dates range");
+  return res.json();
+}
+
 export async function updateMe(data: UpdateUserRequest): Promise<User> {
   const res = await authFetch("/api/users/me", {
     method: "PUT",

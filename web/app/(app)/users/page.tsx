@@ -1,64 +1,124 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Paper,
   Title,
   Stack,
-  Card,
-  Group,
-  Text,
-  Button,
-  Loader,
-  Center,
   Select,
   Alert,
+  Loader,
+  Center,
+  Text,
+  Card,
 } from "@mantine/core";
-import { DatePickerInput } from "@mantine/dates";
+import { Schedule, ScheduleHeader, ScheduleEventData, ScheduleViewLevel, DateStringValue } from '@mantine/schedule';
+import { SegmentedControl } from '@mantine/core';
 import {
   User,
   Slot,
   getUsers,
   getUser,
-  getUserSlots,
+  getUserSlotsRange,
   createBooking,
 } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
+import BookingConfirmationModal from "@/components/BookingConfirmationModal";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
+import "dayjs/locale/ru";
 
+dayjs.locale("ru");
 dayjs.extend(customParseFormat);
 
-// Format time from HH:mm:ss or HH:mm:ss.ssssss or HH:mm to HH:mm
-function formatTime(timeStr: string): string {
-  const cleanStr = timeStr.split('.')[0];
-  if (cleanStr.length === 5 && cleanStr.includes(':')) {
-    return cleanStr;
+const DEFAULT_SCHEDULE_VIEW: ScheduleViewLevel = "month";
+const getSlotEventId = (slot: Slot) => `${slot.id}_${slot.date}`;
+const SLOT_DATE_TIME_FORMAT = "YYYY-MM-DD HH:mm";
+
+const isSlotInFuture = (slot: Slot) =>
+  dayjs(`${slot.date} ${slot.startTime}`, SLOT_DATE_TIME_FORMAT, true).isAfter(dayjs());
+
+const isSlotBookable = (slot: Slot) => !slot.isBooked && isSlotInFuture(slot);
+
+// Русские названия месяцев
+const russianMonths = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+];
+
+const getPreviousDate = (date: string, view: ScheduleViewLevel) => {
+  const d = dayjs(date);
+  switch (view) {
+    case 'month': return d.subtract(1, 'month').format('YYYY-MM-DD');
+    case 'week': return d.subtract(1, 'week').format('YYYY-MM-DD');
+    case 'year': return d.subtract(1, 'year').format('YYYY-MM-DD');
+    default: return date;
   }
-  const parsed = dayjs(cleanStr, "HH:mm:ss");
-  return parsed.isValid() ? parsed.format("HH:mm") : cleanStr;
-}
+};
+
+const getNextDate = (date: string, view: ScheduleViewLevel) => {
+  const d = dayjs(date);
+  switch (view) {
+    case 'month': return d.add(1, 'month').format('YYYY-MM-DD');
+    case 'week': return d.add(1, 'week').format('YYYY-MM-DD');
+    case 'year': return d.add(1, 'year').format('YYYY-MM-DD');
+    default: return date;
+  }
+};
+
+const getHeaderLabel = (date: string, view: ScheduleViewLevel) => {
+  const d = dayjs(date);
+  const monthIndex = d.month();
+  
+  switch (view) {
+    case 'month': 
+      return `${russianMonths[monthIndex]} ${d.year()}`;
+    case 'week': {
+      const start = d.startOf('week');
+      const end = start.add(6, 'day');
+      const startMonth = start.month();
+      const endMonth = end.month();
+      
+      if (startMonth === endMonth) {
+        return `${start.date()} – ${end.date()} ${russianMonths[startMonth]} ${d.year()}`;
+      }
+      return `${start.date()} ${russianMonths[startMonth]} – ${end.date()} ${russianMonths[endMonth]} ${d.year()}`;
+    }
+    case 'year': 
+      return `${d.year()} год`;
+    default: 
+      return d.format('LL');
+  }
+};
 
 export default function UsersCatalogPage() {
   const { user: currentUser } = useAuth();
-  
+  const scheduleContainerRef = useRef<HTMLDivElement>(null);
+
   // Список всех пользователей для Select
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
-  
+
   // Выбранный пользователь
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userLoading, setUserLoading] = useState(false);
-  
-  // Дата и слоты
-  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
-  const [slots, setSlots] = useState<Slot[] | null>(null);
+
+  // Schedule state
+  const [scheduleDate, setScheduleDate] = useState<DateStringValue>(dayjs().format('YYYY-MM-DD'));
+  const [scheduleView, setScheduleView] = useState<ScheduleViewLevel>(DEFAULT_SCHEDULE_VIEW);
+  const [scheduleEvents, setScheduleEvents] = useState<ScheduleEventData[]>([]);
+  const [daySlots, setDaySlots] = useState<Slot[]>([]);
+
+  // Загрузка данных
+  const [datesLoading, setDatesLoading] = useState(false);
   const [slotsLoading, setSlotsLoading] = useState(false);
-  
-  // Бронирование
-  const [bookingInProgress, setBookingInProgress] = useState<string | null>(null);
-  
+
+  // Модалка подтверждения
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [bookingLoading, setBookingLoading] = useState(false);
+
   // Уведомления
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -85,9 +145,14 @@ export default function UsersCatalogPage() {
   useEffect(() => {
     if (selectedUserId) {
       loadSelectedUser();
+      // Reset schedule state when user changes
+      setScheduleDate(dayjs().format('YYYY-MM-DD'));
+      setScheduleView(DEFAULT_SCHEDULE_VIEW);
+      loadScheduleEvents(DEFAULT_SCHEDULE_VIEW, dayjs().format('YYYY-MM-DD'), selectedUserId);
     } else {
       setSelectedUser(null);
-      setSlots(null);
+      setScheduleEvents([]);
+      setDaySlots([]);
     }
   }, [selectedUserId]);
 
@@ -105,51 +170,190 @@ export default function UsersCatalogPage() {
     }
   };
 
-  // Загрузка слотов при изменении пользователя или даты
-  useEffect(() => {
-    if (selectedUserId && selectedDate) {
-      loadSlots();
-    }
-  }, [selectedUserId, selectedDate]);
+  // Загрузка событий для Schedule
+  const loadScheduleEvents = useCallback(async (
+    view: ScheduleViewLevel,
+    date: string,
+    userId?: string
+  ) => {
+    const targetUserId = userId || selectedUserId;
+    if (!targetUserId) return;
 
-  const loadSlots = async () => {
-    if (!selectedUserId || !selectedDate) return;
     try {
-      setSlotsLoading(true);
-      const dateStr = selectedDate.toISOString().split("T")[0];
-      const data = await getUserSlots(selectedUserId, dateStr);
-      setSlots(data.slots ?? []);
+      setDatesLoading(true);
+
+      if (view === 'month') {
+        const start = dayjs(date).startOf("month").format("YYYY-MM-DD");
+        const end = dayjs(date).endOf("month").format("YYYY-MM-DD");
+        const data = await getUserSlotsRange(targetUserId, start, end);
+        const availableSlots = (data.slots ?? []).filter(isSlotBookable);
+        const events: ScheduleEventData[] = availableSlots.map((slot) => ({
+          id: getSlotEventId(slot),
+          title: `${slot.startTime} - ${slot.endTime}`,
+          start: `${slot.date} ${slot.startTime}:00`,
+          end: `${slot.date} ${slot.endTime}:00`,
+          color: 'green',
+          payload: { type: 'slot', slot }
+        }));
+        setScheduleEvents(events);
+      } else if (view === 'week') {
+        const start = dayjs(date).startOf("week").format("YYYY-MM-DD");
+        const end = dayjs(date).endOf("week").format("YYYY-MM-DD");
+        const data = await getUserSlotsRange(targetUserId, start, end);
+        const weekSlots = (data.slots ?? []).filter(isSlotBookable);
+        setDaySlots(weekSlots); // Сохраняем для модалки
+
+        // Маппим в events для Schedule (как в Day view)
+        const weekEvents: ScheduleEventData[] = weekSlots.map((slot) => ({
+          id: getSlotEventId(slot),
+          title: `${slot.startTime} - ${slot.endTime}`,
+          start: `${slot.date} ${slot.startTime}:00`,
+          end: `${slot.date} ${slot.endTime}:00`,
+          color: 'green',
+          payload: { type: 'slot', slot },
+        }));
+
+        setScheduleEvents(weekEvents);
+      } else if (view === 'day') {
+        const data = await getUserSlotsRange(targetUserId, date, date);
+        const availableSlots = (data.slots ?? []).filter(isSlotBookable);
+        setDaySlots(availableSlots);
+        const events: ScheduleEventData[] = availableSlots.map((slot) => ({
+          id: getSlotEventId(slot),
+          title: `${slot.startTime} - ${slot.endTime}`,
+          start: `${slot.date} ${slot.startTime}:00`,
+          end: `${slot.date} ${slot.endTime}:00`,
+          color: 'green',
+          payload: { type: 'slot', slot }
+        }));
+        setScheduleEvents(events);
+      }
     } catch (e) {
       console.error(e);
-      setError("Не удалось загрузить слоты");
+      setError("Не удалось загрузить доступные даты");
     } finally {
-      setSlotsLoading(false);
+      setDatesLoading(false);
+    }
+  }, [selectedUserId]);
+
+  // Обработчик смены view
+  const handleViewChange = (view: ScheduleViewLevel) => {
+    setScheduleView(view);
+    if (selectedUserId) {
+      loadScheduleEvents(view, scheduleDate);
     }
   };
 
-  const handleBooking = async (slot: Slot) => {
-    if (!currentUser || !selectedUserId) return;
+  // Обработчик смены даты
+  const handleDateChange = (date: string) => {
+    setScheduleDate(date);
+    if (selectedUserId) {
+      loadScheduleEvents(scheduleView, date);
+    }
+  };
+
+  // В YearView клики по дням переводим в MonthView без onDayClick,
+  // чтобы избежать протекания unsupported props в DOM.
+  useEffect(() => {
+    if (scheduleView !== "year") return;
+    const container = scheduleContainerRef.current;
+    if (!container) return;
+
+    const handleYearDayClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const button = target.closest("button");
+      if (!button) return;
+
+      const ariaLabel = button.getAttribute("aria-label");
+      if (!ariaLabel) return;
+
+      const parsedDate = dayjs(
+        ariaLabel,
+        ["MMMM D, YYYY", "D MMMM YYYY", "YYYY-MM-DD"],
+        "ru",
+        true
+      );
+      if (!parsedDate.isValid()) return;
+
+      const targetDate = parsedDate.format("YYYY-MM-DD");
+      setScheduleDate(targetDate);
+      setScheduleView("month");
+      if (selectedUserId) {
+        loadScheduleEvents("month", targetDate);
+      }
+    };
+
+    container.addEventListener("click", handleYearDayClick, true);
+    return () => container.removeEventListener("click", handleYearDayClick, true);
+  }, [scheduleView, selectedUserId, loadScheduleEvents]);
+
+  const handleEventClick = (event: ScheduleEventData) => {
+    if (event.payload?.type === 'slot') {
+      if (!isSlotInFuture(event.payload.slot)) {
+        setError("Нельзя записаться на время, которое уже прошло");
+        return;
+      }
+      // Клик на слот в Week view → сразу модалка
+      setSelectedSlot(event.payload.slot);
+      setModalOpen(true);
+    } else if (event.payload?.type === 'badge') {
+      // Клик на badge в Month view → открыть все слоты дня
+      setScheduleDate(event.payload.date);
+      setScheduleView('day');
+      loadScheduleEvents('day', event.payload.date);
+    }
+  };
+
+  // В dropdown "+N more" библиотека не пробрасывает onEventClick,
+  // поэтому открываем модалку кликом по телу события.
+  const renderScheduleEventBody = useCallback((event: ScheduleEventData) => (
+    <Text
+      size="sm"
+      truncate
+      style={{ cursor: "pointer" }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleEventClick(event);
+      }}
+    >
+      {event.title}
+    </Text>
+  ), []);
+
+  // Обработка подтверждения бронирования
+  const handleBookingConfirm = async () => {
+    if (!selectedSlot || !selectedUserId || !currentUser) return;
+    if (!isSlotInFuture(selectedSlot)) {
+      setError("Нельзя записаться на время, которое уже прошло");
+      setModalOpen(false);
+      return;
+    }
+
     try {
-      setBookingInProgress(slot.id);
+      setBookingLoading(true);
       setError(null);
       setSuccess(null);
 
-      const [scheduleId, slotStartTime] = slot.id.split("_");
+      const [scheduleId, slotStartTime] = selectedSlot.id.split("_");
 
       await createBooking({
         ownerId: selectedUserId,
         scheduleId: scheduleId,
         slotStartTime: slotStartTime,
-        slotDate: slot.date,
+        slotDate: selectedSlot.date,
       });
 
       setSuccess("Запись успешно создана!");
-      await loadSlots();
+      setModalOpen(false);
+
+      // Обновляем доступные даты
+      await loadScheduleEvents(scheduleView, scheduleDate);
     } catch (e: any) {
       console.error(e);
       setError(e.message || "Не удалось создать запись");
     } finally {
-      setBookingInProgress(null);
+      setBookingLoading(false);
     }
   };
 
@@ -158,8 +362,6 @@ export default function UsersCatalogPage() {
     value: user.id,
     label: `${user.name} (${user.email})`,
   }));
-
-  const availableSlots = slots?.filter((s) => !s.isBooked) ?? [];
 
   return (
     <Stack gap="md" data-testid="users-page">
@@ -215,51 +417,120 @@ export default function UsersCatalogPage() {
           </Card>
 
           <Paper p="md" withBorder>
-            <Title order={4} mb="md">
-              Выберите дату
-            </Title>
-            <DatePickerInput
-              value={selectedDate}
-              onChange={(value) => setSelectedDate(value ? new Date(value) : null)}
-              locale="ru"
-              minDate={new Date()}
-            />
-          </Paper>
-
-          <Paper p="md" withBorder>
-            <Title order={4} mb="md">
-              Доступное время
-            </Title>
-            {slotsLoading ? (
-              <Center>
+            {datesLoading || slotsLoading ? (
+              <Center h="400px">
                 <Loader />
               </Center>
-            ) : availableSlots.length === 0 ? (
-              <Text c="dimmed">Нет доступного времени на выбранную дату</Text>
             ) : (
-              <Stack gap="xs">
-                {availableSlots.map((slot) => (
-                  <Card key={slot.id} withBorder padding="sm">
-                    <Group justify="space-between">
-                      <Text>
-                        {formatTime(slot.startTime)} - {formatTime(slot.endTime)}
-                      </Text>
-                      <Button
-                        size="sm"
-                        onClick={() => handleBooking(slot)}
-                        loading={bookingInProgress === slot.id}
-                        disabled={selectedUserId === currentUser?.id}
-                      >
-                        {selectedUserId === currentUser?.id ? "Это вы" : "Записаться"}
-                      </Button>
-                    </Group>
-                  </Card>
-                ))}
-              </Stack>
+              <>
+                <ScheduleHeader>
+                  <ScheduleHeader.Previous 
+                    onClick={() => {
+                      const newDate = getPreviousDate(scheduleDate, scheduleView);
+                      setScheduleDate(newDate);
+                      handleDateChange(newDate);
+                    }} 
+                  />
+                  <ScheduleHeader.Control interactive={false} miw={200}>
+                    {getHeaderLabel(scheduleDate, scheduleView)}
+                  </ScheduleHeader.Control>
+                  <ScheduleHeader.Next 
+                    onClick={() => {
+                      const newDate = getNextDate(scheduleDate, scheduleView);
+                      setScheduleDate(newDate);
+                      handleDateChange(newDate);
+                    }} 
+                  />
+                  <ScheduleHeader.Today 
+                    onClick={() => {
+                      const today = dayjs().format('YYYY-MM-DD');
+                      setScheduleDate(today);
+                      handleDateChange(today);
+                    }} 
+                  >
+                    Сегодня
+                  </ScheduleHeader.Today>
+                  <div style={{ marginInlineStart: 'auto' }}>
+                    <SegmentedControl
+                      value={scheduleView}
+                      onChange={(v) => handleViewChange(v as ScheduleViewLevel)}
+                      data={[
+                        { label: 'Неделя', value: 'week' },
+                        { label: 'Месяц', value: 'month' },
+                        { label: 'Год', value: 'year' },
+                      ]}
+                    />
+                  </div>
+                </ScheduleHeader>
+
+                <div ref={scheduleContainerRef}>
+                  <Schedule
+                    view={scheduleView}
+                    onViewChange={handleViewChange}
+                    date={scheduleDate}
+                    onDateChange={handleDateChange}
+                    labels={{
+                      day: "День",
+                      week: "Неделя",
+                      month: "Месяц",
+                      year: "Год",
+                      today: "Сегодня",
+                      next: "Вперед",
+                      previous: "Назад",
+                      allDay: "Весь день",
+                      weekday: "День недели",
+                      timeSlot: "Временной слот",
+                      selectMonth: "Выбрать месяц",
+                      selectYear: "Выбрать год",
+                      switchToDayView: "Переключить на день",
+                      switchToWeekView: "Переключить на неделю",
+                      switchToMonthView: "Переключить на месяц",
+                      switchToYearView: "Переключить на год",
+                      viewSelectLabel: "Вид календаря",
+                      noEvents: "Нет событий",
+                      more: "Еще",
+                      moreLabel: (count) => `+${count} еще`,
+                    }}
+                    events={scheduleEvents}
+                  dayViewProps={{
+                    withHeader: false,
+                    onEventClick: handleEventClick,
+                    renderEventBody: renderScheduleEventBody,
+                  }}
+                    monthViewProps={{
+                      withHeader: false,
+                    maxEventsPerDay: 2,
+                    onEventClick: handleEventClick,
+                    renderEventBody: renderScheduleEventBody,
+                    }}
+                    weekViewProps={{ 
+                    withHeader: false,
+                    onEventClick: handleEventClick,
+                    renderEventBody: renderScheduleEventBody,
+                    }}
+                    yearViewProps={{ withHeader: false }}
+                  />
+                </div>
+              </>
+            )}
+
+            {scheduleView === 'day' && daySlots.length === 0 && !slotsLoading && (
+              <Center h="200px">
+                <Text c="dimmed">Нет доступных слотов на этот день</Text>
+              </Center>
             )}
           </Paper>
         </>
       )}
+
+      <BookingConfirmationModal
+        opened={modalOpen}
+        onClose={() => setModalOpen(false)}
+        slot={selectedSlot}
+        userName={selectedUser?.name || ""}
+        onConfirm={handleBookingConfirm}
+        loading={bookingLoading}
+      />
     </Stack>
   );
 }

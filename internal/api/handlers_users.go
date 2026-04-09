@@ -26,6 +26,9 @@ func usersRouter(pool *pgxpool.Pool) http.Handler {
 	r.Get("/", h.list)
 	r.Get("/{id}", h.get)
 	r.Get("/{id}/slots", h.slots)
+	r.Get("/{id}/slots-range", h.slotsRange)
+	r.Get("/{id}/available-dates", h.availableDates)
+	r.Get("/{id}/available-dates-range", h.availableDatesRange)
 
 	return r
 }
@@ -154,6 +157,151 @@ func (h *usersHandler) slots(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]interface{}{"slots": slots})
+}
+
+// slotsRange returns slots for a user in a date range (inclusive)
+func (h *usersHandler) slotsRange(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+	currentUserID := auth.GetUserID(r.Context())
+	start := r.URL.Query().Get("start")
+	end := r.URL.Query().Get("end")
+
+	if start == "" || end == "" {
+		jsonError(w, http.StatusBadRequest, "start and end parameters are required (format: YYYY-MM-DD)")
+		return
+	}
+
+	startDate, err := time.Parse("2006-01-02", start)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid start date format, expected YYYY-MM-DD")
+		return
+	}
+
+	endDate, err := time.Parse("2006-01-02", end)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid end date format, expected YYYY-MM-DD")
+		return
+	}
+
+	if endDate.Before(startDate) {
+		jsonError(w, http.StatusBadRequest, "end date must be greater than or equal to start date")
+		return
+	}
+
+	// Check visibility
+	if !h.canSeeUser(r.Context(), currentUserID, userID) {
+		jsonError(w, http.StatusForbidden, "you don't have access to this user")
+		return
+	}
+
+	var allSlots []models.Slot
+	for current := startDate; !current.After(endDate); current = current.AddDate(0, 0, 1) {
+		dateStr := current.Format("2006-01-02")
+		slots, err := h.getSlotsForDate(r.Context(), currentUserID, userID, dateStr)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		allSlots = append(allSlots, slots...)
+	}
+
+	if allSlots == nil {
+		allSlots = []models.Slot{}
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]interface{}{"slots": allSlots})
+}
+
+// availableDates returns dates with available slots for a user in a given month
+type availableDate struct {
+	Date           string `json:"date"`
+	AvailableSlots int    `json:"availableSlots"`
+}
+
+func (h *usersHandler) availableDates(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+	currentUserID := auth.GetUserID(r.Context())
+	month := r.URL.Query().Get("month")
+
+	if month == "" {
+		jsonError(w, http.StatusBadRequest, "month parameter is required (format: YYYY-MM)")
+		return
+	}
+
+	// Check visibility
+	if !h.canSeeUser(r.Context(), currentUserID, userID) {
+		jsonError(w, http.StatusForbidden, "you don't have access to this user")
+		return
+	}
+
+	// Parse month to get start and end dates
+	monthDate, err := time.Parse("2006-01", month)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid month format, expected YYYY-MM")
+		return
+	}
+
+	startDate := monthDate.Format("2006-01-02")
+	// Get last day of month
+	nextMonth := monthDate.AddDate(0, 1, 0)
+	endDate := nextMonth.AddDate(0, 0, -1).Format("2006-01-02")
+
+	// Get available dates
+	dates, err := h.getAvailableDatesForMonth(r.Context(), currentUserID, userID, startDate, endDate)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	if dates == nil {
+		dates = []availableDate{}
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]interface{}{"dates": dates})
+}
+
+// availableDatesRange returns dates with available slots for a user in a given date range
+func (h *usersHandler) availableDatesRange(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+	currentUserID := auth.GetUserID(r.Context())
+	start := r.URL.Query().Get("start")
+	end := r.URL.Query().Get("end")
+
+	if start == "" || end == "" {
+		jsonError(w, http.StatusBadRequest, "start and end parameters are required (format: YYYY-MM-DD)")
+		return
+	}
+
+	// Validate date formats
+	_, err := time.Parse("2006-01-02", start)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid start date format, expected YYYY-MM-DD")
+		return
+	}
+	_, err = time.Parse("2006-01-02", end)
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid end date format, expected YYYY-MM-DD")
+		return
+	}
+
+	// Check visibility
+	if !h.canSeeUser(r.Context(), currentUserID, userID) {
+		jsonError(w, http.StatusForbidden, "you don't have access to this user")
+		return
+	}
+
+	// Get available dates for the range
+	dates, err := h.getAvailableDatesForRange(r.Context(), currentUserID, userID, start, end)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	if dates == nil {
+		dates = []availableDate{}
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]interface{}{"dates": dates})
 }
 
 // updateMe updates the current user's profile
@@ -449,4 +597,45 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 	}
 
 	return slots, nil
+}
+
+// getAvailableDatesForMonth returns all dates in a range that have available slots
+func (h *usersHandler) getAvailableDatesForMonth(ctx context.Context, currentUserID, ownerID, startDate, endDate string) ([]availableDate, error) {
+	return h.getAvailableDatesForRange(ctx, currentUserID, ownerID, startDate, endDate)
+}
+
+// getAvailableDatesForRange returns all dates in a range that have available slots
+func (h *usersHandler) getAvailableDatesForRange(ctx context.Context, currentUserID, ownerID, startDate, endDate string) ([]availableDate, error) {
+	// Iterate through each day in the range
+	start, _ := time.Parse("2006-01-02", startDate)
+	end, _ := time.Parse("2006-01-02", endDate)
+
+	var availableDates []availableDate
+
+	for current := start; !current.After(end); current = current.AddDate(0, 0, 1) {
+		dateStr := current.Format("2006-01-02")
+
+		// Get slots for this date
+		slots, err := h.getSlotsForDate(ctx, currentUserID, ownerID, dateStr)
+		if err != nil {
+			return nil, err
+		}
+
+		// Count available (not booked) slots
+		availableCount := 0
+		for _, slot := range slots {
+			if !slot.IsBooked {
+				availableCount++
+			}
+		}
+
+		if availableCount > 0 {
+			availableDates = append(availableDates, availableDate{
+				Date:           dateStr,
+				AvailableSlots: availableCount,
+			})
+		}
+	}
+
+	return availableDates, nil
 }
