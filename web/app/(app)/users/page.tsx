@@ -429,7 +429,14 @@ export default function UsersCatalogPage() {
         placeholder="Начните вводить имя или email"
         description={
           !selectedUserId ? (
-            <Paper className="users-select-hint" shadow="sm" p="md" radius="md" mt={6}>
+            <Paper
+              className="users-select-hint"
+              shadow="sm"
+              p="md"
+              radius="md"
+              mt={6}
+              data-testid="users-visibility-hint"
+            >
               <Group gap="sm" align="flex-start" wrap="nowrap">
                 <ThemeIcon variant="filled" color="orange" size="lg" radius="md" aria-hidden>
                   <IconInfoCircle size={22} stroke={1.5} />

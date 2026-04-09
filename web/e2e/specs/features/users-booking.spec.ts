@@ -16,14 +16,18 @@ test.describe('Users Booking Page UX', () => {
     await page.goto('/users')
 
     await expect(page.locator('[data-testid="users-title"]')).toHaveText('Запись на встречу')
-    await expect(page.locator('text=Поиск осуществляется по пользователям с публичным профилем')).toBeVisible()
+    const hint = page.locator('[data-testid="users-visibility-hint"]')
+    await expect(hint).toBeVisible()
+    await expect(hint).toContainText('Кого можно найти в списке')
+    await expect(hint).toContainText('публичным профилем')
+    await expect(hint).toContainText('группе')
     await expect(page.locator('button:has-text("Записаться на ближайшее")')).toHaveCount(0)
     await expect(page.locator('text=Шаг 1')).toBeVisible()
     await expect(page.locator('text=Шаг 2')).toBeVisible()
     await expect(page.locator('text=Шаг 3')).toBeVisible()
   })
 
-  test('should hide visibility hint after selecting user', async ({ page, request }) => {
+  test('should hide visibility hint after selecting user', async ({ page, request, usersPage }) => {
     const owner = generateTestUser()
     const ownerRegister = await request.post('/api/auth/register', {
       data: owner,
@@ -47,13 +51,9 @@ test.describe('Users Booking Page UX', () => {
       window.localStorage.setItem('auth_token', token)
     }, viewerAuth.token)
 
-    await page.goto('/users')
+    await usersPage.goto()
+    await usersPage.selectUserByEmail(owner.email)
 
-    const selectInput = page.locator('[data-testid="users-select"]')
-    await selectInput.click()
-    await selectInput.fill(owner.email)
-    await page.locator(`text=${owner.email}`).first().click()
-
-    await expect(page.locator('text=Поиск осуществляется по пользователям с публичным профилем')).toHaveCount(0)
+    await expect(usersPage.visibilityHint).toHaveCount(0)
   })
 })

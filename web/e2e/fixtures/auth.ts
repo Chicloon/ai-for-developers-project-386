@@ -4,8 +4,6 @@ import { RegisterPage } from '../pages/RegisterPage'
 import { UsersPage } from '../pages/UsersPage'
 import { SchedulePage } from '../pages/SchedulePage'
 import { BookingsPage } from '../pages/BookingsPage'
-import { GroupsPage } from '../pages/GroupsPage'
-import { UserProfilePage } from '../pages/UserProfilePage'
 import { generateTestUser, TestUser } from './data'
 
 // Extend base test with fixtures
@@ -15,8 +13,6 @@ type Fixtures = {
   usersPage: UsersPage
   schedulePage: SchedulePage
   bookingsPage: BookingsPage
-  groupsPage: GroupsPage
-  userProfilePage: UserProfilePage
   testUser: TestUser
 }
 
@@ -35,12 +31,6 @@ export const test = base.extend<Fixtures>({
   },
   bookingsPage: async ({ page }, use) => {
     await use(new BookingsPage(page))
-  },
-  groupsPage: async ({ page }, use) => {
-    await use(new GroupsPage(page))
-  },
-  userProfilePage: async ({ page }, use) => {
-    await use(new UserProfilePage(page))
   },
   testUser: async ({}, use) => {
     await use(generateTestUser())

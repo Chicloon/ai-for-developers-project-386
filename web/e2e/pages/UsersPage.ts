@@ -1,16 +1,17 @@
 import { Page, Locator, expect } from '@playwright/test'
 
+/** Страница каталога «Запись на встречу» (/users): Select + календарь слотов. */
 export class UsersPage {
   readonly page: Page
   readonly title: Locator
-  readonly loadingIndicator: Locator
-  readonly emptyMessage: Locator
+  readonly userSelect: Locator
+  readonly visibilityHint: Locator
 
   constructor(page: Page) {
     this.page = page
     this.title = page.locator('[data-testid="users-title"]')
-    this.loadingIndicator = page.locator('[data-testid="users-loading"]')
-    this.emptyMessage = page.locator('[data-testid="users-empty"]')
+    this.userSelect = page.locator('[data-testid="users-select"]')
+    this.visibilityHint = page.locator('[data-testid="users-visibility-hint"]')
   }
 
   async goto() {
@@ -18,8 +19,11 @@ export class UsersPage {
     await expect(this.page.locator('[data-testid="users-page"]')).toBeVisible()
   }
 
-  async waitForLoad() {
-    await this.title.waitFor({ state: 'visible' })
+  /** Выбор пользователя в searchable Select (как в Mantine: ввод и клик по опции). */
+  async selectUserByEmail(email: string) {
+    await this.userSelect.click()
+    await this.userSelect.fill(email)
+    await this.page.locator(`text=${email}`).first().click()
   }
 
   async getUserCard(userId: string) {
@@ -32,10 +36,6 @@ export class UsersPage {
 
   getUserEmail(userId: string): Locator {
     return this.page.locator(`[data-testid="user-email-${userId}"]`)
-  }
-
-  async clickBook(userId: string) {
-    await this.page.locator(`[data-testid="user-book-button-${userId}"]`).click()
   }
 
   async expectUserVisible(userId: string, name: string, email: string) {

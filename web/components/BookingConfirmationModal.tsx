@@ -39,6 +39,7 @@ export default function BookingConfirmationModal({
       title="Подтверждение записи"
       centered
       size="sm"
+      data-testid="booking-modal"
     >
       <Stack gap="md">
         <Text>
@@ -70,10 +71,15 @@ export default function BookingConfirmationModal({
         </Text>
 
         <Group justify="flex-end" mt="md" visibleFrom="sm">
-          <Button variant="default" onClick={onClose} disabled={loading}>
+          <Button
+            variant="default"
+            onClick={onClose}
+            disabled={loading}
+            data-testid="booking-cancel-button"
+          >
             Отмена
           </Button>
-          <Button onClick={onConfirm} loading={loading}>
+          <Button onClick={onConfirm} loading={loading} data-testid="booking-confirm-button">
             Подтвердить запись
           </Button>
         </Group>

@@ -12,13 +12,17 @@ e2e/
 ├── pages/
 │   ├── LoginPage.ts     # Page Object для логина
 │   ├── RegisterPage.ts  # Page Object для регистрации
-│   ├── UsersPage.ts     # Page Object для каталога пользователей
-│   └── SchedulePage.ts  # Page Object для расписания
+│   ├── UsersPage.ts     # Каталог «Запись на встречу» (/users)
+│   ├── SchedulePage.ts  # Моё расписание + вкладка видимости
+│   └── BookingsPage.ts  # Мои бронирования (календарь)
 └── specs/
     ├── auth/
     │   └── login.spec.ts       # Тесты аутентификации
     ├── features/
-    │   └── schedule.spec.ts    # Тесты расписания
+    │   ├── schedule.spec.ts
+    │   ├── bookings.spec.ts
+    │   ├── groups.spec.ts      # Группы на вкладке «Настройки видимости»
+    │   └── users-booking.spec.ts
     └── smoke/
         └── health.spec.ts      # Smoke тесты
 ```
