@@ -1,8 +1,16 @@
-# Render Blueprint: API (Go) + Web (Next.js).
-# Подключение: Dashboard → New → Blueprint → указать репозиторий.
-# После первого применения задайте DATABASE_URL (Supabase Session pooler) для сервиса API вручную, если sync: false.
+# Render Blueprint: API (Go) + Web (Next.js) + Postgres в одном проекте.
 #
-# Пользовательский URL приложения — у сервиса *-web. API доступен по своему *.onrender.com (/health, /api/*).
+# Подключение: https://dashboard.render.com/blueprints → New Blueprint → репозиторий и ветка с этим файлом.
+# Если в аккаунте уже есть Postgres с именем call-booking-db, Render подхватит его в Blueprint.
+# Внешняя БД (Supabase): удалите блок databases и задайте DATABASE_URL вручную (sync: false + fromDatabase убрать).
+#
+# Публичный URL для пользователей — у call-booking-web. API: /health и /api/* на URL сервиса API.
+
+databases:
+  - name: call-booking-db
+    region: frankfurt
+    plan: free
+    postgresMajorVersion: "16"
 
 services:
   - type: web
@@ -14,7 +22,9 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: call-booking-db
+          property: connectionString
       - key: JWT_SECRET
         generateValue: true
 
