@@ -21,6 +21,8 @@
 docker compose up -d
 ```
 
+Переменная `DATABASE_URL` для сервиса `api` необязательна: по умолчанию используется строка из `docker-compose.yml` (подключение к контейнеру `db`). Для своей БД задайте `DATABASE_URL` в окружении или в файле `.env` рядом с compose.
+
 Будут запущены:
 - **PostgreSQL**: порт 5432
 - **Go API**: порт 8080
@@ -117,6 +119,7 @@ cd web && npm run dev
 | `VPS_USER` | Username для SSH |
 | `VPS_SSH_KEY` | Приватный SSH ключ |
 | `GH_TOKEN` | GitHub PAT с правами `write:packages` |
+| `DATABASE_URL` | Строка подключения PostgreSQL для API при деплое (передаётся в `docker compose` из CI; локально можно не задавать — используется значение по умолчанию) |
 
 ### 2. Настройка сервера
 
@@ -148,7 +151,7 @@ docker compose up -d
 1. Билдит Docker образы (API и Web)
 2. Пушит в GitHub Container Registry
 3. Подключается к VPS по SSH
-4. Выполняет `docker compose pull && docker compose up -d`
+4. Экспортирует `DATABASE_URL` из секрета репозитория и выполняет `docker compose pull && docker compose up -d`
 
 ---
 

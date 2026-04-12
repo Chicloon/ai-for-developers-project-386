@@ -18,7 +18,7 @@ services:
   api:
     image: ghcr.io/chicloon/ai-for-developers-project-386/api:latest
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/call_booking?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/call_booking?sslmode=disable}
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key-minimum-32-characters-long}
     depends_on:

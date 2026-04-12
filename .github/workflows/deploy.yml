@@ -66,8 +66,10 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             ::add-mask::${{ secrets.GHCR_PAT }}
+            ::add-mask::${{ secrets.DATABASE_URL }}
             echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
             cd ~/ai-for-developers-project-386
+            export DATABASE_URL='${{ secrets.DATABASE_URL }}'
             echo "=== Remove old images ==="
             docker rmi -f ghcr.io/chicloon/ai-for-developers-project-386/api:latest ghcr.io/chicloon/ai-for-developers-project-386/web:latest 2>/dev/null || true
             echo "=== Pull and recreate ==="
