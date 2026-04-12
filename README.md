@@ -37,6 +37,8 @@ docker compose up -d
 
 При **Supabase** и других облачных Postgres обычно нужен **`?sslmode=require`** в строке подключения. API при старте **обязательно применяет миграции** из `migrations/` — если миграция не прошла, процесс завершится с ошибкой в логах (раньше сервер мог подняться без схемы и возвращать «database error» при регистрации).
 
+**Порт по умолчанию** в коде (`DATABASE_URL` не задан): `localhost:5432` — как у стандартного Postgres и проверок Hexlet в CI. Если поднимаете только БД через `docker compose up -d db`, на хосте порт **5434** — задайте в `.env`: `DATABASE_URL=postgres://postgres:postgres@localhost:5434/call_booking?sslmode=disable`.
+
 Будут запущены:
 - **PostgreSQL**: порт 5432
 - **Go API**: порт 8080

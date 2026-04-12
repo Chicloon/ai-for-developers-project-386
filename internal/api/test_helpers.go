@@ -20,7 +20,7 @@ import (
 func setupTestDB(t *testing.T) *pgxpool.Pool {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5434/call_booking_test?sslmode=disable"
+		dsn = "postgres://postgres:postgres@localhost:5432/call_booking_test?sslmode=disable"
 	}
 
 	ctx := context.Background()
