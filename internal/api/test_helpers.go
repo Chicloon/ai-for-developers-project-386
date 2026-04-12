@@ -3,66 +3,104 @@ package api
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"call-booking/internal/auth"
+	"call-booking/internal/db"
 	"call-booking/internal/models"
-
-	"github.com/jackc/pgx/v5/pgxpool"
+	"call-booking/internal/uuid"
 )
 
-// setupTestDB creates a database connection for testing.
+func migrationsDir(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	for _, rel := range []string{"migrations", filepath.Join("..", "..", "migrations")} {
+		p := filepath.Join(wd, rel)
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			return p
+		}
+	}
+	t.Fatalf("migrations directory not found (cwd=%s)", wd)
+	return ""
+}
+
+// setupTestDB creates a SQLite database for testing (temp file by default).
 // Skips the test if the database is unavailable.
-func setupTestDB(t *testing.T) *pgxpool.Pool {
+func setupTestDB(t *testing.T) *sql.DB {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5432/call_booking_test?sslmode=disable"
+		p := filepath.Join(t.TempDir(), "test.db")
+		dsn = "file:" + p + "?_foreign_keys=on"
 	}
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dsn)
+	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Skipf("Database not available: %v", err)
 	}
 
-	if err := pool.Ping(ctx); err != nil {
+	if err := sqldb.PingContext(ctx); err != nil {
+		_ = sqldb.Close()
 		t.Skipf("Database not available: %v", err)
 	}
 
-	return pool
+	if err := db.Migrate(ctx, sqldb, migrationsDir(t)); err != nil {
+		_ = sqldb.Close()
+		t.Fatalf("migrations failed: %v", err)
+	}
+
+	return sqldb
 }
 
 // cleanupTestData removes test data from the database.
-func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
+func cleanupTestData(t *testing.T, sqldb *sql.DB) {
 	ctx := context.Background()
-	// Delete in order to respect foreign key constraints
-	_, _ = pool.Exec(ctx, "DELETE FROM bookings")
-	_, _ = pool.Exec(ctx, "DELETE FROM group_members")
-	_, _ = pool.Exec(ctx, "DELETE FROM visibility_groups")
-	_, _ = pool.Exec(ctx, "DELETE FROM schedules")
-	_, _ = pool.Exec(ctx, "DELETE FROM users")
+	_, _ = sqldb.ExecContext(ctx, "DELETE FROM bookings")
+	_, _ = sqldb.ExecContext(ctx, "DELETE FROM schedule_visibility_groups")
+	_, _ = sqldb.ExecContext(ctx, "DELETE FROM group_members")
+	_, _ = sqldb.ExecContext(ctx, "DELETE FROM visibility_groups")
+	_, _ = sqldb.ExecContext(ctx, "DELETE FROM schedules")
+	_, _ = sqldb.ExecContext(ctx, "DELETE FROM users")
 }
 
-// createTestUser creates a test user and returns the user ID.
-func createTestUser(t *testing.T, pool *pgxpool.Pool, email, password, name string) string {
+// createTestUser creates a test user (with default visibility groups, same as registration) and returns the user ID.
+func createTestUser(t *testing.T, sqldb *sql.DB, email, password, name string) string {
 	ctx := context.Background()
 
-	// Hash password
 	hash, err := auth.HashPassword(password)
 	if err != nil {
 		t.Fatalf("failed to hash password: %v", err)
 	}
 
-	var userID string
-	err = pool.QueryRow(ctx,
-		"INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id",
-		email, hash, name).Scan(&userID)
+	userID := uuid.New()
+	_, err = sqldb.ExecContext(ctx,
+		`INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)`,
+		userID, email, hash, name)
 	if err != nil {
 		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	groupNames := map[string]string{
+		"family":  "Семья",
+		"work":    "Работа",
+		"friends": "Друзья",
+	}
+	for level, gname := range groupNames {
+		_, err := sqldb.ExecContext(ctx,
+			`INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, ?, ?)`,
+			uuid.New(), userID, gname, level)
+		if err != nil {
+			t.Fatalf("failed to create group %s: %v", level, err)
+		}
 	}
 
 	return userID
@@ -70,7 +108,6 @@ func createTestUser(t *testing.T, pool *pgxpool.Pool, email, password, name stri
 
 // getAuthToken generates a JWT token for testing.
 func getAuthToken(userID, email string) string {
-	// Set a test secret for JWT
 	auth.SetSecret("test-secret-key-minimum-32-characters-long-for-testing-only")
 
 	token, err := auth.GenerateToken(userID, email)

@@ -1,29 +1,30 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 
 	"call-booking/internal/auth"
 	"call-booking/internal/models"
+	"call-booking/internal/uuid"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// mapAuthDBError turns pgx errors into a short client message; details go to logs.
+// mapAuthDBError turns DB errors into a short client message; details go to logs.
 func mapAuthDBError(err error) string {
 	if err == nil {
 		return "database error"
 	}
 	s := err.Error()
 	switch {
-	case strings.Contains(s, "does not exist") && (strings.Contains(s, "relation") || strings.Contains(s, "table")):
+	case strings.Contains(s, "no such table"):
 		return "Схема БД не готова: выполните миграции или проверьте DATABASE_URL."
-	case strings.Contains(s, "column") && strings.Contains(s, "does not exist"):
+	case strings.Contains(s, "no such column"):
 		return "Схема БД не совпадает с приложением: примените миграции из каталога migrations."
 	case strings.Contains(s, "password authentication failed"):
 		return "Ошибка подключения к БД: неверные учётные данные."
@@ -35,12 +36,12 @@ func mapAuthDBError(err error) string {
 }
 
 type authHandler struct {
-	pool *pgxpool.Pool
+	db *sql.DB
 }
 
-func authRouter(pool *pgxpool.Pool) http.Handler {
+func authRouter(db *sql.DB) http.Handler {
 	r := chi.NewRouter()
-	h := &authHandler{pool: pool}
+	h := &authHandler{db: db}
 
 	r.Post("/register", h.register)
 	r.Post("/login", h.login)
@@ -64,8 +65,8 @@ func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user exists
 	var exists bool
-	err := h.pool.QueryRow(r.Context(),
-		"SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)",
+	err := h.db.QueryRowContext(r.Context(),
+		"SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)",
 		req.Email).Scan(&exists)
 	if err != nil {
 		log.Printf("register: check email exists: %v", err)
@@ -84,11 +85,14 @@ func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := uuid.New()
+
 	// Create user
 	var user models.User
-	err = h.pool.QueryRow(r.Context(),
-		"INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, is_public, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
-		req.Email, hash, req.Name).
+	err = h.db.QueryRowContext(r.Context(),
+		`INSERT INTO users (id, email, password_hash, name) VALUES (?, ?, ?, ?)
+		 RETURNING id, email, name, is_public, strftime('%Y-%m-%dT%H:%M:%SZ', created_at)`,
+		userID, req.Email, hash, req.Name).
 		Scan(&user.ID, &user.Email, &user.Name, &user.IsPublic, &user.CreatedAt)
 	if err != nil {
 		log.Printf("register: insert user: %v", err)
@@ -103,9 +107,9 @@ func (h *authHandler) register(w http.ResponseWriter, r *http.Request) {
 		"friends": "Друзья",
 	}
 	for level, name := range groupNames {
-		_, err := h.pool.Exec(r.Context(),
-			"INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, $2, $3)",
-			user.ID, name, level)
+		_, err := h.db.ExecContext(r.Context(),
+			`INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, ?, ?)`,
+			uuid.New(), user.ID, name, level)
 		if err != nil {
 			// Log error but don't fail registration
 			log.Printf("Failed to create %s group for user %s: %v", level, user.ID, err)
@@ -141,12 +145,13 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 	// Find user
 	var user models.User
 	var passwordHash string
-	err := h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name, is_public, password_hash, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM users WHERE email = $1",
+	err := h.db.QueryRowContext(r.Context(),
+		`SELECT id, email, name, is_public, password_hash,
+			strftime('%Y-%m-%dT%H:%M:%SZ', created_at) FROM users WHERE email = ?`,
 		req.Email).
 		Scan(&user.ID, &user.Email, &user.Name, &user.IsPublic, &passwordHash, &user.CreatedAt)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			// Run dummy bcrypt to prevent timing attacks
 			auth.CheckPassword("dummy", "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy")
 			jsonError(w, http.StatusUnauthorized, "Неверный email или пароль")
@@ -180,8 +185,8 @@ func (h *authHandler) me(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 
 	var user models.User
-	err := h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name, is_public, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM users WHERE id = $1",
+	err := h.db.QueryRowContext(r.Context(),
+		`SELECT id, email, name, is_public, strftime('%Y-%m-%dT%H:%M:%SZ', created_at) FROM users WHERE id = ?`,
 		userID).
 		Scan(&user.ID, &user.Email, &user.Name, &user.IsPublic, &user.CreatedAt)
 	if err != nil {

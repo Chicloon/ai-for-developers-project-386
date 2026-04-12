@@ -6,18 +6,19 @@ import (
 	"testing"
 
 	"call-booking/internal/models"
+	"call-booking/internal/uuid"
 )
 
 func TestGroupsList_Empty(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "groups@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Groups Test User")
+	userID := createTestUser(t, db, email, "password123", "Groups Test User")
 	token := getAuthToken(userID, email)
 
 	rr := makeRequest(router, "GET", "/api/my/groups", nil, token)
@@ -36,27 +37,15 @@ func TestGroupsList_Empty(t *testing.T) {
 }
 
 func TestGroupsList_WithGroups(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
-	ctx := context.Background()
+	router := NewRouter(db)
 
-	// Create user
 	email := "groups2@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Groups Test User")
+	userID := createTestUser(t, db, email, "password123", "Groups Test User")
 	token := getAuthToken(userID, email)
-
-	// Insert test groups
-	_, err := pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Family', 'family')", userID)
-	if err != nil {
-		t.Fatalf("failed to insert group: %v", err)
-	}
-	_, err = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Work', 'work')", userID)
-	if err != nil {
-		t.Fatalf("failed to insert group: %v", err)
-	}
 
 	rr := makeRequest(router, "GET", "/api/my/groups", nil, token)
 
@@ -67,34 +56,31 @@ func TestGroupsList_WithGroups(t *testing.T) {
 	var resp map[string][]models.VisibilityGroup
 	parseResponse(t, rr, &resp)
 
-	if len(resp["groups"]) != 2 {
-		t.Errorf("expected 2 groups, got %d", len(resp["groups"]))
+	if len(resp["groups"]) != 3 {
+		t.Errorf("expected 3 groups from registration, got %d", len(resp["groups"]))
 	}
 
-	// Check visibility levels
-	familyFound := false
-	workFound := false
+	familyFound, workFound, friendsFound := false, false, false
 	for _, g := range resp["groups"] {
-		if g.VisibilityLevel == "family" {
+		switch g.VisibilityLevel {
+		case "family":
 			familyFound = true
-		}
-		if g.VisibilityLevel == "work" {
+		case "work":
 			workFound = true
+		case "friends":
+			friendsFound = true
 		}
 	}
-	if !familyFound {
-		t.Error("expected to find family group")
-	}
-	if !workFound {
-		t.Error("expected to find work group")
+	if !familyFound || !workFound || !friendsFound {
+		t.Error("expected family, work, and friends groups")
 	}
 }
 
 func TestGroupsList_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/my/groups", nil, "")
 
@@ -104,21 +90,21 @@ func TestGroupsList_Unauthorized(t *testing.T) {
 }
 
 func TestGroupsListMembers_Empty(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create user
 	email := "groups11@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Groups Test User")
+	userID := createTestUser(t, db, email, "password123", "Groups Test User")
 	token := getAuthToken(userID, email)
 
 	// Insert a group (using friends level since public was removed)
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Empty Group', 'friends') RETURNING id", userID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Empty Group', 'friends') RETURNING id", uuid.New(), userID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
@@ -141,31 +127,31 @@ func TestGroupsListMembers_Empty(t *testing.T) {
 }
 
 func TestGroupsListMembers_WithMembers(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create owner user
 	ownerEmail := "groupowner3@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
 
 	// Create member user
 	memberEmail := "groupmember@example.com"
-	memberID := createTestUser(t, pool, memberEmail, "password123", "Group Member")
+	memberID := createTestUser(t, db, memberEmail, "password123", "Group Member")
 
 	// Insert a group
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Group with Members', 'family') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Group with Members', 'family') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
 
 	// Add member to group
-	_, err = pool.Exec(ctx, "INSERT INTO group_members (group_id, member_id, added_by) VALUES ($1, $2, $1)", groupID, memberID)
+	_, err = db.ExecContext(ctx, "INSERT INTO group_members (id, group_id, member_id, added_by) VALUES (?, ?, ?, ?)", uuid.New(), groupID, memberID, ownerID)
 	if err != nil {
 		t.Fatalf("failed to add member: %v", err)
 	}
@@ -195,24 +181,24 @@ func TestGroupsListMembers_WithMembers(t *testing.T) {
 }
 
 func TestGroupsListMembers_NotOwner(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create two users
 	ownerEmail := "groupowner4@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 
 	otherEmail := "groupother3@example.com"
-	otherID := createTestUser(t, pool, otherEmail, "password123", "Other User")
+	otherID := createTestUser(t, db, otherEmail, "password123", "Other User")
 	otherToken := getAuthToken(otherID, otherEmail)
 
 	// Insert a group for owner
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Private Group', 'family') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Private Group', 'family') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
@@ -230,25 +216,25 @@ func TestGroupsListMembers_NotOwner(t *testing.T) {
 }
 
 func TestGroupsAddMember_ByEmail(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create owner user
 	ownerEmail := "groupowner5@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
 
 	// Create user to add as member
 	memberEmail := "membertoadd@example.com"
-	memberID := createTestUser(t, pool, memberEmail, "password123", "Member to Add")
+	memberID := createTestUser(t, db, memberEmail, "password123", "Member to Add")
 
 	// Insert a group
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Group', 'work') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Group', 'work') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
@@ -275,25 +261,25 @@ func TestGroupsAddMember_ByEmail(t *testing.T) {
 }
 
 func TestGroupsAddMember_ByUserID(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create owner user
 	ownerEmail := "groupowner6@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
 
 	// Create user to add as member
 	memberEmail := "membertoadd2@example.com"
-	memberID := createTestUser(t, pool, memberEmail, "password123", "Member to Add")
+	memberID := createTestUser(t, db, memberEmail, "password123", "Member to Add")
 
 	// Insert a group
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Group', 'work') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Group', 'work') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
@@ -317,21 +303,21 @@ func TestGroupsAddMember_ByUserID(t *testing.T) {
 }
 
 func TestGroupsAddMember_UserNotFound(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create owner user
 	ownerEmail := "groupowner7@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
 
 	// Insert a group
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Group', 'work') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Group', 'work') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
@@ -354,21 +340,21 @@ func TestGroupsAddMember_UserNotFound(t *testing.T) {
 }
 
 func TestGroupsAddMember_MissingEmailAndUserID(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create owner user
 	ownerEmail := "groupowner8@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
 
 	// Insert a group
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Group', 'work') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Group', 'work') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
@@ -388,28 +374,28 @@ func TestGroupsAddMember_MissingEmailAndUserID(t *testing.T) {
 }
 
 func TestGroupsAddMember_NotOwner(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create two users
 	ownerEmail := "groupowner9@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 
 	otherEmail := "groupother4@example.com"
-	otherID := createTestUser(t, pool, otherEmail, "password123", "Other User")
+	otherID := createTestUser(t, db, otherEmail, "password123", "Other User")
 	otherToken := getAuthToken(otherID, otherEmail)
 
 	// Create user to add
 	memberEmail := "member@example.com"
-	_ = createTestUser(t, pool, memberEmail, "password123", "Member")
+	_ = createTestUser(t, db, memberEmail, "password123", "Member")
 
 	// Insert a group for owner
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Private Group', 'family') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Private Group', 'family') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
@@ -431,31 +417,31 @@ func TestGroupsAddMember_NotOwner(t *testing.T) {
 }
 
 func TestGroupsAddMember_DuplicateMember(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create owner user
 	ownerEmail := "groupowner10@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
 
 	// Create member user
 	memberEmail := "duplicatemember@example.com"
-	memberID := createTestUser(t, pool, memberEmail, "password123", "Duplicate Member")
+	memberID := createTestUser(t, db, memberEmail, "password123", "Duplicate Member")
 
 	// Insert a group
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Group', 'family') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Group', 'family') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
 
 	// Add member first time
-	_, err = pool.Exec(ctx, "INSERT INTO group_members (group_id, member_id, added_by) VALUES ($1, $2, $1)", groupID, memberID)
+	_, err = db.ExecContext(ctx, "INSERT INTO group_members (id, group_id, member_id, added_by) VALUES (?, ?, ?, ?)", uuid.New(), groupID, memberID, ownerID)
 	if err != nil {
 		t.Fatalf("failed to add member: %v", err)
 	}
@@ -478,32 +464,32 @@ func TestGroupsAddMember_DuplicateMember(t *testing.T) {
 }
 
 func TestGroupsRemoveMember_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create owner user
 	ownerEmail := "groupowner11@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
 
 	// Create member user
 	memberEmail := "membertoremove@example.com"
-	memberID := createTestUser(t, pool, memberEmail, "password123", "Member to Remove")
+	memberID := createTestUser(t, db, memberEmail, "password123", "Member to Remove")
 
 	// Insert a group
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Group', 'friends') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Group', 'friends') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
 
 	// Add member and get the membership ID
 	var memberRecordID string
-	err = pool.QueryRow(ctx, "INSERT INTO group_members (group_id, member_id, added_by) VALUES ($1, $2, $1) RETURNING id", groupID, memberID).Scan(&memberRecordID)
+	err = db.QueryRowContext(ctx, "INSERT INTO group_members (id, group_id, member_id, added_by) VALUES (?, ?, ?, ?) RETURNING id", uuid.New(), groupID, memberID, ownerID).Scan(&memberRecordID)
 	if err != nil {
 		t.Fatalf("failed to add member: %v", err)
 	}
@@ -516,21 +502,21 @@ func TestGroupsRemoveMember_Success(t *testing.T) {
 }
 
 func TestGroupsRemoveMember_NotFound(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create owner user
 	ownerEmail := "groupowner12@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
 
 	// Insert a group
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Group', 'friends') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Group', 'friends') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
@@ -548,35 +534,35 @@ func TestGroupsRemoveMember_NotFound(t *testing.T) {
 }
 
 func TestGroupsRemoveMember_NotOwner(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create two users
 	ownerEmail := "groupowner13@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Group Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Group Owner")
 
 	otherEmail := "groupother5@example.com"
-	otherID := createTestUser(t, pool, otherEmail, "password123", "Other User")
+	otherID := createTestUser(t, db, otherEmail, "password123", "Other User")
 	otherToken := getAuthToken(otherID, otherEmail)
 
 	// Create member user
 	memberEmail := "member5@example.com"
-	memberID := createTestUser(t, pool, memberEmail, "password123", "Member")
+	memberID := createTestUser(t, db, memberEmail, "password123", "Member")
 
 	// Insert a group for owner
 	var groupID string
-	err := pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Private Group', 'family') RETURNING id", ownerID).Scan(&groupID)
+	err := db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Private Group', 'family') RETURNING id", uuid.New(), ownerID).Scan(&groupID)
 	if err != nil {
 		t.Fatalf("failed to insert group: %v", err)
 	}
 
 	// Add member
 	var memberRecordID string
-	err = pool.QueryRow(ctx, "INSERT INTO group_members (group_id, member_id, added_by) VALUES ($1, $2, $1) RETURNING id", groupID, memberID).Scan(&memberRecordID)
+	err = db.QueryRowContext(ctx, "INSERT INTO group_members (id, group_id, member_id, added_by) VALUES (?, ?, ?, ?) RETURNING id", uuid.New(), groupID, memberID, ownerID).Scan(&memberRecordID)
 	if err != nil {
 		t.Fatalf("failed to add member: %v", err)
 	}

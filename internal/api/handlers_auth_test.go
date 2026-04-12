@@ -8,11 +8,11 @@ import (
 )
 
 func TestAuthRegister_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	req := models.RegisterRequest{
 		Email:    "test@example.com",
@@ -41,11 +41,11 @@ func TestAuthRegister_Success(t *testing.T) {
 }
 
 func TestAuthRegister_DuplicateEmail(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create first user
 	req := models.RegisterRequest{
@@ -77,11 +77,11 @@ func TestAuthRegister_DuplicateEmail(t *testing.T) {
 }
 
 func TestAuthRegister_MissingFields(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	testCases := []struct {
 		name    string
@@ -120,16 +120,16 @@ func TestAuthRegister_MissingFields(t *testing.T) {
 }
 
 func TestAuthLogin_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "login@example.com"
 	password := "password123"
-	createTestUser(t, pool, email, password, "Login Test User")
+	createTestUser(t, db, email, password, "Login Test User")
 
 	// Login
 	req := models.LoginRequest{
@@ -154,15 +154,15 @@ func TestAuthLogin_Success(t *testing.T) {
 }
 
 func TestAuthLogin_InvalidCredentials(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "login2@example.com"
-	createTestUser(t, pool, email, "correctpassword", "Login Test User")
+	createTestUser(t, db, email, "correctpassword", "Login Test User")
 
 	// Try to login with wrong password
 	req := models.LoginRequest{
@@ -182,11 +182,11 @@ func TestAuthLogin_InvalidCredentials(t *testing.T) {
 }
 
 func TestAuthLogin_NonExistentUser(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	req := models.LoginRequest{
 		Email:    "nonexistent@example.com",
@@ -205,15 +205,15 @@ func TestAuthLogin_NonExistentUser(t *testing.T) {
 }
 
 func TestAuthMe_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user and get token
 	email := "me@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Me Test User")
+	userID := createTestUser(t, db, email, "password123", "Me Test User")
 	token := getAuthToken(userID, email)
 
 	rr := makeRequest(router, "GET", "/api/auth/me", nil, token)
@@ -234,11 +234,11 @@ func TestAuthMe_Success(t *testing.T) {
 }
 
 func TestAuthMe_MissingToken(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/auth/me", nil, "")
 
@@ -253,11 +253,11 @@ func TestAuthMe_MissingToken(t *testing.T) {
 }
 
 func TestAuthMe_InvalidToken(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/auth/me", nil, "invalid-token")
 
@@ -266,7 +266,7 @@ func TestAuthMe_InvalidToken(t *testing.T) {
 	}
 
 	errResp := parseErrorResponse(t, rr)
-	if errResp.Error != "invalid authorization header format" {
+	if errResp.Error != "invalid or expired token" {
 		t.Errorf("unexpected error message: %s", errResp.Error)
 	}
 }

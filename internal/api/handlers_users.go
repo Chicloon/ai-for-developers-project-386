@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,16 +12,15 @@ import (
 	"call-booking/internal/models"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type usersHandler struct {
-	pool *pgxpool.Pool
+	db *sql.DB
 }
 
-func usersRouter(pool *pgxpool.Pool) http.Handler {
+func usersRouter(db *sql.DB) http.Handler {
 	r := chi.NewRouter()
-	h := &usersHandler{pool: pool}
+	h := &usersHandler{db: db}
 
 	r.Use(auth.Middleware)
 	r.Get("/", h.list)
@@ -40,16 +40,16 @@ func (h *usersHandler) list(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT DISTINCT u.id, u.email, u.name, u.is_public FROM users u
 		LEFT JOIN visibility_groups vg ON vg.owner_id = u.id
-		LEFT JOIN group_members gm ON gm.group_id = vg.id AND gm.member_id = $1
-		WHERE u.id != $1
+		LEFT JOIN group_members gm ON gm.group_id = vg.id AND gm.member_id = ?
+		WHERE u.id != ?
 		  AND (
-			u.is_public = true
+			u.is_public != 0
 			OR gm.member_id IS NOT NULL
 		  )
 		ORDER BY u.name
 	`
 
-	rows, err := h.pool.Query(r.Context(), query, currentUserID)
+	rows, err := h.db.QueryContext(r.Context(), query, currentUserID, currentUserID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error")
 		return
@@ -80,11 +80,11 @@ func (h *usersHandler) availableUsers(w http.ResponseWriter, r *http.Request) {
 
 	query := `
 		SELECT id, email, name, is_public FROM users
-		WHERE id != $1
+		WHERE id != ?
 		ORDER BY name
 	`
 
-	rows, err := h.pool.Query(r.Context(), query, currentUserID)
+	rows, err := h.db.QueryContext(r.Context(), query, currentUserID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error")
 		return
@@ -113,15 +113,21 @@ func (h *usersHandler) get(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "id")
 	currentUserID := auth.GetUserID(r.Context())
 
-	// Check visibility
+	var exists bool
+	err := h.db.QueryRowContext(r.Context(), "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID).Scan(&exists)
+	if err != nil || !exists {
+		jsonError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
 	if !h.canSeeUser(r.Context(), currentUserID, userID) {
 		jsonError(w, http.StatusForbidden, "you don't have access to this user")
 		return
 	}
 
 	var user models.User
-	err := h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name FROM users WHERE id = $1",
+	err = h.db.QueryRowContext(r.Context(),
+		"SELECT id, email, name FROM users WHERE id = ?",
 		userID).
 		Scan(&user.ID, &user.Email, &user.Name)
 	if err != nil {
@@ -317,18 +323,19 @@ func (h *usersHandler) updateMe(w http.ResponseWriter, r *http.Request) {
 	// Build dynamic update query
 	var setFields []string
 	var args []interface{}
-	argIdx := 1
 
 	if req.Name != nil {
-		setFields = append(setFields, fmt.Sprintf("name = $%d", argIdx))
+		setFields = append(setFields, "name = ?")
 		args = append(args, *req.Name)
-		argIdx++
 	}
 
 	if req.IsPublic != nil {
-		setFields = append(setFields, fmt.Sprintf("is_public = $%d", argIdx))
-		args = append(args, *req.IsPublic)
-		argIdx++
+		var v int
+		if *req.IsPublic {
+			v = 1
+		}
+		setFields = append(setFields, "is_public = ?")
+		args = append(args, v)
 	}
 
 	if len(setFields) == 0 {
@@ -340,11 +347,11 @@ func (h *usersHandler) updateMe(w http.ResponseWriter, r *http.Request) {
 	args = append(args, userID)
 
 	query := fmt.Sprintf(
-		"UPDATE users SET %s, updated_at = NOW() WHERE id = $%d RETURNING id, email, name, is_public, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')",
-		joinStrings(setFields, ", "), argIdx)
+		`UPDATE users SET %s, updated_at = strftime('%%Y-%%m-%%dT%%H:%%M:%%SZ', 'now') WHERE id = ? RETURNING id, email, name, is_public, strftime('%%Y-%%m-%%dT%%H:%%M:%%SZ', created_at)`,
+		joinStrings(setFields, ", "))
 
 	var user models.User
-	err := h.pool.QueryRow(r.Context(), query, args...).
+	err := h.db.QueryRowContext(r.Context(), query, args...).
 		Scan(&user.ID, &user.Email, &user.Name, &user.IsPublic, &user.CreatedAt)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error")
@@ -377,12 +384,12 @@ func (h *usersHandler) canSeeUser(ctx context.Context, currentUserID, targetUser
 		SELECT EXISTS (
 			SELECT 1 FROM users u
 			LEFT JOIN visibility_groups vg ON vg.owner_id = u.id
-			LEFT JOIN group_members gm ON gm.group_id = vg.id AND gm.member_id = $1
-			WHERE u.id = $2
-			  AND (u.is_public = true OR gm.member_id IS NOT NULL)
+			LEFT JOIN group_members gm ON gm.group_id = vg.id AND gm.member_id = ?
+			WHERE u.id = ?
+			  AND (u.is_public != 0 OR gm.member_id IS NOT NULL)
 		)
 	`
-	err := h.pool.QueryRow(ctx, query, currentUserID, targetUserID).Scan(&visible)
+	err := h.db.QueryRowContext(ctx, query, currentUserID, targetUserID).Scan(&visible)
 	if err != nil {
 		return false
 	}
@@ -393,17 +400,17 @@ func (h *usersHandler) canSeeUser(ctx context.Context, currentUserID, targetUser
 func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, ownerID, date string) ([]models.Slot, error) {
 	// Check if owner is public
 	var isOwnerPublic bool
-	err := h.pool.QueryRow(ctx, "SELECT is_public FROM users WHERE id = $1", ownerID).Scan(&isOwnerPublic)
+	err := h.db.QueryRowContext(ctx, "SELECT is_public != 0 FROM users WHERE id = ?", ownerID).Scan(&isOwnerPublic)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get user's group memberships with the owner
-	groupRows, err := h.pool.Query(ctx, `
+	groupRows, err := h.db.QueryContext(ctx, `
 		SELECT vg.id 
 		FROM visibility_groups vg
 		JOIN group_members gm ON gm.group_id = vg.id
-		WHERE vg.owner_id = $1 AND gm.member_id = $2
+		WHERE vg.owner_id = ? AND gm.member_id = ?
 	`, ownerID, currentUserID)
 	if err != nil {
 		return nil, err
@@ -420,27 +427,20 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 	}
 
 	// Get schedules for the date with visibility filtering
-	// A schedule is visible if:
-	// 1. It has no group associations (general schedule) AND user is member of at least one of owner's groups
-	// 2. It has group associations and current user is a member of at least one of those specific groups
-	// isPublic only affects catalog visibility (canSeeUser), not schedule visibility
-	rows, err := h.pool.Query(ctx, `
+	rows, err := h.db.QueryContext(ctx, `
 		SELECT s.id, s.start_time, s.end_time, s.is_blocked,
-			COALESCE(
-				ARRAY_AGG(svg.group_id) FILTER (WHERE svg.group_id IS NOT NULL),
-				ARRAY[]::UUID[]
-			) as group_ids
+			COALESCE(GROUP_CONCAT(svg.group_id), '') AS group_ids
 		FROM schedules s
 		LEFT JOIN schedule_visibility_groups svg ON svg.schedule_id = s.id
-		WHERE s.user_id = $1
+		WHERE s.user_id = ?
 		  AND (
-			  (s.type = 'one-time' AND s.date = $2)
+			  (s.type = 'one-time' AND s.date = ?)
 			  OR
-			  (s.type = 'recurring' AND s.day_of_week = EXTRACT(DOW FROM $2::date))
+			  (s.type = 'recurring' AND s.day_of_week = CAST(strftime('%w', ?) AS INTEGER))
 		  )
 		GROUP BY s.id, s.start_time, s.end_time, s.is_blocked
 		ORDER BY s.start_time
-	`, ownerID, date)
+	`, ownerID, date, date)
 	if err != nil {
 		return nil, err
 	}
@@ -460,11 +460,11 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 
 	for rows.Next() {
 		var s schedule
-		var groupIDs []string
-		if err := rows.Scan(&s.id, &s.startTime, &s.endTime, &s.isBlocked, &groupIDs); err != nil {
+		var groupIDsRaw sql.NullString
+		if err := rows.Scan(&s.id, &s.startTime, &s.endTime, &s.isBlocked, &groupIDsRaw); err != nil {
 			return nil, err
 		}
-		s.groupIDs = filterEmptyUUIDs(groupIDs)
+		s.groupIDs = parseGroupConcat(groupIDsRaw)
 		allSchedules = append(allSchedules, s)
 
 		// Separate into group and general schedules
@@ -523,12 +523,11 @@ func (h *usersHandler) getSlotsForDate(ctx context.Context, currentUserID, owner
 	}
 
 	// Get booked slots - use slot_date to properly track bookings on recurring schedules.
-	// TO_CHAR: в Go TIME приходит как "09:00:00", а ключ слота — "09:00" (15:04), иначе IsBooked не совпадает.
-	bookedRows, err := h.pool.Query(ctx, `
-		SELECT TO_CHAR(slot_start_time, 'HH24:MI')
+	bookedRows, err := h.db.QueryContext(ctx, `
+		SELECT substr(slot_start_time, 1, 5)
 		FROM bookings
-		WHERE owner_id = $1
-		  AND slot_date = $2::date
+		WHERE owner_id = ?
+		  AND slot_date = ?
 		  AND status = 'active'
 	`, ownerID, date)
 	if err != nil {

@@ -2,26 +2,27 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"call-booking/internal/auth"
 	"call-booking/internal/models"
+	"call-booking/internal/uuid"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type bookingsHandler struct {
-	pool *pgxpool.Pool
+	db *sql.DB
 }
 
-func bookingsRouter(pool *pgxpool.Pool) http.Handler {
+func bookingsRouter(db *sql.DB) http.Handler {
 	r := chi.NewRouter()
-	h := &bookingsHandler{pool: pool}
+	h := &bookingsHandler{db: db}
 
 	r.Use(auth.Middleware)
 	r.Get("/", h.list)
@@ -34,30 +35,26 @@ func bookingsRouter(pool *pgxpool.Pool) http.Handler {
 func (h *bookingsHandler) list(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 
-	// First, fetch bookings with their group IDs
 	query := `
 		SELECT b.id, b.schedule_id,
 		       bu.id, bu.email, bu.name,
 		       ou.id, ou.email, ou.name,
-		       TO_CHAR(b.slot_date, 'YYYY-MM-DD'), b.slot_start_time,
-		       TO_CHAR((b.slot_start_time::time + interval '30 minutes'), 'HH24:MI:SS'),
-		       b.status, TO_CHAR(b.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), TO_CHAR(b.cancelled_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-		       COALESCE(
-			       ARRAY_AGG(svg.group_id) FILTER (WHERE svg.group_id IS NOT NULL),
-			       ARRAY[]::UUID[]
-		       ) as group_ids
+		       b.slot_date, b.slot_start_time,
+		       strftime('%H:%M:%S', datetime(b.slot_date || ' ' || b.slot_start_time, '+30 minutes')),
+		       b.status, strftime('%Y-%m-%dT%H:%M:%SZ', b.created_at), b.cancelled_at,
+		       COALESCE(GROUP_CONCAT(svg.group_id), '') AS group_ids
 		FROM bookings b
 		JOIN users bu ON bu.id = b.booker_id
 		JOIN users ou ON ou.id = b.owner_id
 		JOIN schedules s ON s.id = b.schedule_id
 		LEFT JOIN schedule_visibility_groups svg ON svg.schedule_id = b.schedule_id
-		WHERE b.booker_id = $1 OR b.owner_id = $1
+		WHERE b.booker_id = ? OR b.owner_id = ?
 		GROUP BY b.id, b.schedule_id, bu.id, bu.email, bu.name, ou.id, ou.email, ou.name,
 		         b.slot_date, b.slot_start_time, b.status, b.created_at, b.cancelled_at
 		ORDER BY b.created_at DESC
 	`
 
-	rows, err := h.pool.Query(r.Context(), query, userID)
+	rows, err := h.db.QueryContext(r.Context(), query, userID, userID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -65,24 +62,34 @@ func (h *bookingsHandler) list(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	var bookings []models.Booking
-	bookingGroupIDs := make(map[string][]string) // booking ID -> group IDs
+	bookingGroupIDs := make(map[string][]string)
 
 	for rows.Next() {
 		var b models.Booking
 		var cancelledAt *string
-		var groupIDs []string
+		var groupIDsRaw sql.NullString
+		var slotDate, slotStart, endSlot sql.NullString
 		if err := rows.Scan(
 			&b.ID, &b.ScheduleID,
 			&b.Booker.ID, &b.Booker.Email, &b.Booker.Name,
 			&b.Owner.ID, &b.Owner.Email, &b.Owner.Name,
-			&b.Date, &b.StartTime, &b.EndTime,
-			&b.Status, &b.CreatedAt, &cancelledAt, &groupIDs); err != nil {
+			&slotDate, &slotStart, &endSlot,
+			&b.Status, &b.CreatedAt, &cancelledAt, &groupIDsRaw); err != nil {
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		b.CancelledAt = cancelledAt
-		b.Groups = []models.VisibilityGroup{} // Initialize empty groups slice
-		cleanGroupIDs := filterEmptyUUIDs(groupIDs)
+		if slotDate.Valid {
+			b.Date = slotDate.String
+		}
+		if slotStart.Valid {
+			b.StartTime = slotStart.String
+		}
+		if endSlot.Valid {
+			b.EndTime = endSlot.String
+		}
+		b.Groups = []models.VisibilityGroup{}
+		cleanGroupIDs := parseGroupConcat(groupIDsRaw)
 		if len(cleanGroupIDs) > 0 {
 			bookingGroupIDs[b.ID] = cleanGroupIDs
 		}
@@ -93,9 +100,7 @@ func (h *bookingsHandler) list(w http.ResponseWriter, r *http.Request) {
 		bookings = []models.Booking{}
 	}
 
-	// Fetch group details for all group IDs
 	if len(bookingGroupIDs) > 0 {
-		// Collect all unique group IDs
 		groupIDSet := make(map[string]bool)
 		for _, ids := range bookingGroupIDs {
 			for _, id := range ids {
@@ -103,60 +108,68 @@ func (h *bookingsHandler) list(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Build slice of unique IDs
 		uniqueGroupIDs := make([]string, 0, len(groupIDSet))
 		for id := range groupIDSet {
 			uniqueGroupIDs = append(uniqueGroupIDs, id)
 		}
 
-		// Fetch all group details
-		groupQuery := `
+		ph := placeholders(len(uniqueGroupIDs))
+		groupQuery := fmt.Sprintf(`
 			SELECT id, owner_id, name, visibility_level
 			FROM visibility_groups
-			WHERE id = ANY($1)
-		`
-		groupRows, err := h.pool.Query(r.Context(), groupQuery, uniqueGroupIDs)
+			WHERE id IN (%s)
+		`, ph)
+		args := make([]interface{}, len(uniqueGroupIDs))
+		for i, id := range uniqueGroupIDs {
+			args[i] = id
+		}
+
+		groupRows, err := h.db.QueryContext(r.Context(), groupQuery, args...)
 		if err == nil {
 			defer groupRows.Close()
 			allGroupMap := make(map[string]models.VisibilityGroup)
-		for groupRows.Next() {
-			var g models.VisibilityGroup
-			if err := groupRows.Scan(&g.ID, &g.OwnerID, &g.Name, &g.VisibilityLevel); err == nil {
-				allGroupMap[g.ID] = g
+			for groupRows.Next() {
+				var g models.VisibilityGroup
+				if err := groupRows.Scan(&g.ID, &g.OwnerID, &g.Name, &g.VisibilityLevel); err == nil {
+					allGroupMap[g.ID] = g
+				}
 			}
-		}
 
-			// Get user's membership in groups
-			memberQuery := `
+			mph := placeholders(len(uniqueGroupIDs))
+			memberQuery := fmt.Sprintf(`
 				SELECT group_id FROM group_members
-				WHERE group_id = ANY($1) AND member_id = $2
-			`
-			memberRows, err := h.pool.Query(r.Context(), memberQuery, uniqueGroupIDs, userID)
+				WHERE group_id IN (%s) AND member_id = ?
+			`, mph)
+			margs := make([]interface{}, 0, len(uniqueGroupIDs)+1)
+			for _, id := range uniqueGroupIDs {
+				margs = append(margs, id)
+			}
+			margs = append(margs, userID)
+
+			memberRows, err := h.db.QueryContext(r.Context(), memberQuery, margs...)
 			userMemberGroups := make(map[string]bool)
 			if err == nil {
 				defer memberRows.Close()
-			for memberRows.Next() {
-				var groupID string
-				if err := memberRows.Scan(&groupID); err == nil {
-					userMemberGroups[groupID] = true
+				for memberRows.Next() {
+					var groupID string
+					if err := memberRows.Scan(&groupID); err == nil {
+						userMemberGroups[groupID] = true
+					}
 				}
 			}
-			}
 
-		// Assign groups to bookings based on ownership
-		for i := range bookings {
-			if ids, ok := bookingGroupIDs[bookings[i].ID]; ok {
-				isOwner := bookings[i].Owner.ID == userID
-				for _, id := range ids {
-					if g, found := allGroupMap[id]; found {
-						// If owner: show all groups; if booker: show only groups where user is member
-						if isOwner || userMemberGroups[id] {
-							bookings[i].Groups = append(bookings[i].Groups, g)
+			for i := range bookings {
+				if ids, ok := bookingGroupIDs[bookings[i].ID]; ok {
+					isOwner := bookings[i].Owner.ID == userID
+					for _, id := range ids {
+						if g, found := allGroupMap[id]; found {
+							if isOwner || userMemberGroups[id] {
+								bookings[i].Groups = append(bookings[i].Groups, g)
+							}
 						}
 					}
 				}
 			}
-		}
 		}
 	}
 
@@ -187,7 +200,6 @@ func (h *bookingsHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user can see the owner and can book this specific schedule
 	canBook, err := h.canBookSchedule(r.Context(), userID, req.OwnerID, req.ScheduleID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
@@ -198,11 +210,15 @@ func (h *bookingsHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if slot is already booked for this specific date and time
+	normalizedSlotTime := req.SlotStartTime
+	if len(normalizedSlotTime) == 5 {
+		normalizedSlotTime = normalizedSlotTime + ":00"
+	}
+
 	var exists bool
-	err = h.pool.QueryRow(r.Context(),
-		"SELECT EXISTS(SELECT 1 FROM bookings WHERE schedule_id = $1 AND slot_date = $2 AND slot_start_time = $3 AND status = 'active')",
-		req.ScheduleID, req.SlotDate, req.SlotStartTime).Scan(&exists)
+	err = h.db.QueryRowContext(r.Context(),
+		`SELECT EXISTS(SELECT 1 FROM bookings WHERE schedule_id = ? AND slot_date = ? AND slot_start_time = ? AND status = 'active')`,
+		req.ScheduleID, req.SlotDate, normalizedSlotTime).Scan(&exists)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -213,28 +229,26 @@ func (h *bookingsHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create booking
 	var b models.Booking
-	err = h.pool.QueryRow(r.Context(),
-		`INSERT INTO bookings (schedule_id, booker_id, owner_id, slot_start_time, slot_date)
-		 VALUES ($1, $2, $3, $4, $5)
-		 RETURNING id, schedule_id, booker_id, owner_id, status, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-		req.ScheduleID, userID, req.OwnerID, req.SlotStartTime, req.SlotDate).
+	bid := uuid.New()
+	err = h.db.QueryRowContext(r.Context(),
+		`INSERT INTO bookings (id, schedule_id, booker_id, owner_id, slot_start_time, slot_date)
+		 VALUES (?, ?, ?, ?, ?, ?)
+		 RETURNING id, schedule_id, booker_id, owner_id, status, strftime('%Y-%m-%dT%H:%M:%SZ', created_at)`,
+		bid, req.ScheduleID, userID, req.OwnerID, normalizedSlotTime, req.SlotDate).
 		Scan(&b.ID, &b.ScheduleID, &b.Booker.ID, &b.Owner.ID, &b.Status, &b.CreatedAt)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	// Get user info
-	h.pool.QueryRow(r.Context(),
-		"SELECT email, name FROM users WHERE id = $1", userID).Scan(&b.Booker.Email, &b.Booker.Name)
-	h.pool.QueryRow(r.Context(),
-		"SELECT email, name FROM users WHERE id = $1", req.OwnerID).Scan(&b.Owner.Email, &b.Owner.Name)
+	_ = h.db.QueryRowContext(r.Context(),
+		"SELECT email, name FROM users WHERE id = ?", userID).Scan(&b.Booker.Email, &b.Booker.Name)
+	_ = h.db.QueryRowContext(r.Context(),
+		"SELECT email, name FROM users WHERE id = ?", req.OwnerID).Scan(&b.Owner.Email, &b.Owner.Name)
 
-	// Get schedule info
-	h.pool.QueryRow(r.Context(),
-		"SELECT date, start_time, end_time FROM schedules WHERE id = $1", req.ScheduleID).
+	_ = h.db.QueryRowContext(r.Context(),
+		"SELECT date, start_time, end_time FROM schedules WHERE id = ?", req.ScheduleID).
 		Scan(&b.Date, &b.StartTime, &b.EndTime)
 
 	jsonResponse(w, http.StatusCreated, b)
@@ -251,25 +265,24 @@ func parseSlotDateTime(slotDate, slotStartTime string) (time.Time, error) {
 			return parsed, nil
 		}
 	}
-	return time.Time{}, errors.New("invalid slot date or time format")
+	return time.Time{}, fmt.Errorf("invalid slot date or time format")
 }
 
 func (h *bookingsHandler) cancel(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 	bookingID := chi.URLParam(r, "id")
 
-	// Verify booking exists and user has permission
 	var bookerID, ownerID, status string
 	var isPast bool
-	err := h.pool.QueryRow(r.Context(), `
+	err := h.db.QueryRowContext(r.Context(), `
 		SELECT booker_id, owner_id, status,
 			(slot_date IS NOT NULL AND slot_start_time IS NOT NULL AND
-			 (slot_date::timestamp + slot_start_time + interval '30 minutes') < NOW()
+			 datetime(slot_date || ' ' || slot_start_time, '+30 minutes') < datetime('now')
 			) AS is_past
-		FROM bookings WHERE id = $1`,
+		FROM bookings WHERE id = ?`,
 		bookingID).Scan(&bookerID, &ownerID, &status, &isPast)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			jsonError(w, http.StatusNotFound, "booking not found")
 			return
 		}
@@ -277,7 +290,6 @@ func (h *bookingsHandler) cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permission: booker or owner can cancel
 	if bookerID != userID && ownerID != userID {
 		jsonError(w, http.StatusForbidden, "you don't have permission to cancel this booking")
 		return
@@ -293,9 +305,10 @@ func (h *bookingsHandler) cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update booking status
-	_, err = h.pool.Exec(r.Context(),
-		"UPDATE bookings SET status = 'cancelled', cancelled_at = NOW(), cancelled_by = $1 WHERE id = $2",
+	_, err = h.db.ExecContext(r.Context(),
+		`UPDATE bookings SET status = 'cancelled',
+			cancelled_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+			cancelled_by = ? WHERE id = ?`,
 		userID, bookingID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
@@ -305,18 +318,13 @@ func (h *bookingsHandler) cancel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// canBookSchedule checks if current user can book a specific schedule
-// Logic:
-// - If schedule has no group associations: visible if owner is public OR user is self
-// - If schedule has group associations: visible if user is member of at least one group OR user is self
 func (h *bookingsHandler) canBookSchedule(ctx context.Context, currentUserID, ownerID, scheduleID string) (bool, error) {
 	if currentUserID == ownerID {
 		return true, nil
 	}
 
-	// Get schedule's group associations
-	rows, err := h.pool.Query(ctx,
-		"SELECT group_id FROM schedule_visibility_groups WHERE schedule_id = $1",
+	rows, err := h.db.QueryContext(ctx,
+		"SELECT group_id FROM schedule_visibility_groups WHERE schedule_id = ?",
 		scheduleID)
 	if err != nil {
 		return false, err
@@ -332,11 +340,10 @@ func (h *bookingsHandler) canBookSchedule(ctx context.Context, currentUserID, ow
 		groupIDs = append(groupIDs, gid)
 	}
 
-	// If schedule has no groups - check if owner is public
 	if len(groupIDs) == 0 {
 		var isPublic bool
-		err := h.pool.QueryRow(ctx,
-			"SELECT is_public FROM users WHERE id = $1",
+		err := h.db.QueryRowContext(ctx,
+			"SELECT is_public != 0 FROM users WHERE id = ?",
 			ownerID).Scan(&isPublic)
 		if err != nil {
 			return false, err
@@ -344,18 +351,21 @@ func (h *bookingsHandler) canBookSchedule(ctx context.Context, currentUserID, ow
 		return isPublic, nil
 	}
 
-	// Schedule has groups - check if user is member of any group
-	// Note: groups belong to the owner, so we need to check if current user is in any of the owner's groups
-	query := `
+	ph := placeholders(len(groupIDs))
+	query := fmt.Sprintf(`
 		SELECT EXISTS (
 			SELECT 1 FROM group_members gm
 			JOIN visibility_groups vg ON vg.id = gm.group_id
-			WHERE vg.owner_id = $1
-			  AND gm.member_id = $2
-			  AND gm.group_id = ANY($3)
+			WHERE vg.owner_id = ?
+			  AND gm.member_id = ?
+			  AND gm.group_id IN (%s)
 		)
-	`
+	`, ph)
+	args := []interface{}{ownerID, currentUserID}
+	for _, g := range groupIDs {
+		args = append(args, g)
+	}
 	var isMember bool
-	err = h.pool.QueryRow(ctx, query, ownerID, currentUserID, groupIDs).Scan(&isMember)
+	err = h.db.QueryRowContext(ctx, query, args...).Scan(&isMember)
 	return isMember, err
 }

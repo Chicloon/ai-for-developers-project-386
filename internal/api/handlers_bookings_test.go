@@ -7,18 +7,19 @@ import (
 	"time"
 
 	"call-booking/internal/models"
+	"call-booking/internal/uuid"
 )
 
 func TestBookingsList_Empty(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "bookings@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Bookings Test User")
+	userID := createTestUser(t, db, email, "password123", "Bookings Test User")
 	token := getAuthToken(userID, email)
 
 	rr := makeRequest(router, "GET", "/api/my/bookings", nil, token)
@@ -39,33 +40,32 @@ func TestBookingsList_Empty(t *testing.T) {
 }
 
 func TestBookingsList_AsBooker(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "ownerbooked@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
-	// Create a schedule for owner
+	slotDay := time.Now().Add(48 * time.Hour)
+	dayOfWeek := int32(slotDay.Weekday())
 	var scheduleID string
-	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
-	// Create a booking
-	_, err = pool.Exec(ctx, "INSERT INTO bookings (schedule_id, booker_id, owner_id, status) VALUES ($1, $2, $3, 'active')", scheduleID, bookerID, ownerID)
+	_, err = db.ExecContext(ctx, "INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status, slot_date, slot_start_time) VALUES (?, ?, ?, ?, 'active', ?, '10:00:00')", uuid.New(), scheduleID, bookerID, ownerID, slotDay.Format("2006-01-02"))
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -95,33 +95,32 @@ func TestBookingsList_AsBooker(t *testing.T) {
 }
 
 func TestBookingsList_AsOwner(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker2@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 
 	// Create owner user
 	ownerEmail := "ownerbooked2@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
-	// Create a schedule for owner
+	slotDay := time.Now().Add(48 * time.Hour)
+	dayOfWeek := int32(slotDay.Weekday())
 	var scheduleID string
-	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
-	// Create a booking
-	_, err = pool.Exec(ctx, "INSERT INTO bookings (schedule_id, booker_id, owner_id, status) VALUES ($1, $2, $3, 'active')", scheduleID, bookerID, ownerID)
+	_, err = db.ExecContext(ctx, "INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status, slot_date, slot_start_time) VALUES (?, ?, ?, ?, 'active', ?, '10:00:00')", uuid.New(), scheduleID, bookerID, ownerID, slotDay.Format("2006-01-02"))
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -148,10 +147,10 @@ func TestBookingsList_AsOwner(t *testing.T) {
 }
 
 func TestBookingsList_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/my/bookings", nil, "")
 
@@ -161,27 +160,28 @@ func TestBookingsList_Unauthorized(t *testing.T) {
 }
 
 func TestBookingsCreate_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker3@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "ownerbooked3@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
-	// Create a schedule for owner
+	// Create a schedule for owner (recurring on same weekday as booking date)
+	tomorrow := time.Now().Add(24 * time.Hour)
+	dayOfWeek := int32(tomorrow.Weekday())
 	var scheduleID string
-	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
@@ -189,6 +189,7 @@ func TestBookingsCreate_Success(t *testing.T) {
 	req := models.CreateBookingRequest{
 		OwnerID:       ownerID,
 		ScheduleID:    scheduleID,
+		SlotDate:      tomorrow.Format("2006-01-02"),
 		SlotStartTime: "10:00",
 	}
 
@@ -213,15 +214,15 @@ func TestBookingsCreate_Success(t *testing.T) {
 }
 
 func TestBookingsCreate_MissingOwnerID(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create booker user
 	bookerEmail := "booker4@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	req := models.CreateBookingRequest{
@@ -235,40 +236,42 @@ func TestBookingsCreate_MissingOwnerID(t *testing.T) {
 	}
 
 	errResp := parseErrorResponse(t, rr)
-	if errResp.Error != "owner_id and schedule_id are required" {
+	if errResp.Error != "owner_id, schedule_id and slot_date are required" {
 		t.Errorf("unexpected error message: %s", errResp.Error)
 	}
 }
 
 func TestBookingsCreate_NotVisibleOwner(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker5@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	// Create owner user without public visibility
 	ownerEmail := "privateowner@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Private Owner")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Private Owner")
 	// No visibility group created, so not visible
 
-	// Create a schedule for owner
+	tomorrow := time.Now().Add(24 * time.Hour)
+	dayOfWeek := int32(tomorrow.Weekday())
 	var scheduleID string
-	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
 	req := models.CreateBookingRequest{
-		OwnerID:    ownerID,
-		ScheduleID: scheduleID,
+		OwnerID:       ownerID,
+		ScheduleID:    scheduleID,
+		SlotDate:      tomorrow.Format("2006-01-02"),
+		SlotStartTime: "10:00",
 	}
 
 	rr := makeRequest(router, "POST", "/api/my/bookings", req, bookerToken)
@@ -278,39 +281,40 @@ func TestBookingsCreate_NotVisibleOwner(t *testing.T) {
 	}
 
 	errResp := parseErrorResponse(t, rr)
-	if errResp.Error != "you don't have access to this user" {
+	if errResp.Error != "you don't have access to book this schedule" {
 		t.Errorf("unexpected error message: %s", errResp.Error)
 	}
 }
 
 func TestBookingsCreate_DuplicateBooking(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker6@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "ownerdup@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
-	// Create a schedule for owner
+	tomorrow := time.Now().Add(24 * time.Hour)
+	dayOfWeek := int32(tomorrow.Weekday())
+	slotDate := tomorrow.Format("2006-01-02")
 	var scheduleID string
-	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
 	// Create first booking
-	_, err = pool.Exec(ctx, "INSERT INTO bookings (schedule_id, booker_id, owner_id, status, slot_start_time) VALUES ($1, $2, $3, 'active', '10:00')", scheduleID, bookerID, ownerID)
+	_, err = db.ExecContext(ctx, "INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status, slot_start_time, slot_date) VALUES (?, ?, ?, ?, 'active', '10:00:00', ?)", uuid.New(), scheduleID, bookerID, ownerID, slotDate)
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -319,6 +323,7 @@ func TestBookingsCreate_DuplicateBooking(t *testing.T) {
 	req := models.CreateBookingRequest{
 		OwnerID:       ownerID,
 		ScheduleID:    scheduleID,
+		SlotDate:      slotDate,
 		SlotStartTime: "10:00",
 	}
 
@@ -335,27 +340,27 @@ func TestBookingsCreate_DuplicateBooking(t *testing.T) {
 }
 
 func TestBookingsCreate_PastSlot(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "bookerpast@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "ownerpast@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create a schedule for owner
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
@@ -380,27 +385,27 @@ func TestBookingsCreate_PastSlot(t *testing.T) {
 }
 
 func TestBookingsCreate_InvalidSlotTimeFormat(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "bookerinvalidtime@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "ownerinvalidtime@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create a schedule for owner
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
@@ -425,14 +430,16 @@ func TestBookingsCreate_InvalidSlotTimeFormat(t *testing.T) {
 }
 
 func TestBookingsCreate_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	req := models.CreateBookingRequest{
-		OwnerID:    "owner-id",
-		ScheduleID: "schedule-id",
+		OwnerID:       "owner-id",
+		ScheduleID:    "schedule-id",
+		SlotDate:      time.Now().Add(24 * time.Hour).Format("2006-01-02"),
+		SlotStartTime: "10:00",
 	}
 
 	rr := makeRequest(router, "POST", "/api/my/bookings", req, "")
@@ -443,34 +450,34 @@ func TestBookingsCreate_Unauthorized(t *testing.T) {
 }
 
 func TestBookingsCancel_AsBooker(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker7@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "ownercancel@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create a schedule for owner
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
 	// Create a booking
 	var bookingID string
-	err = pool.QueryRow(ctx, "INSERT INTO bookings (schedule_id, booker_id, owner_id, status) VALUES ($1, $2, $3, 'active') RETURNING id", scheduleID, bookerID, ownerID).Scan(&bookingID)
+	err = db.QueryRowContext(ctx, "INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status) VALUES (?, ?, ?, ?, 'active') RETURNING id", uuid.New(), scheduleID, bookerID, ownerID).Scan(&bookingID)
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -483,34 +490,34 @@ func TestBookingsCancel_AsBooker(t *testing.T) {
 }
 
 func TestBookingsCancel_AsOwner(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker8@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 
 	// Create owner user
 	ownerEmail := "ownercancel2@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
 	ownerToken := getAuthToken(ownerID, ownerEmail)
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create a schedule for owner
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
 	// Create a booking
 	var bookingID string
-	err = pool.QueryRow(ctx, "INSERT INTO bookings (schedule_id, booker_id, owner_id, status) VALUES ($1, $2, $3, 'active') RETURNING id", scheduleID, bookerID, ownerID).Scan(&bookingID)
+	err = db.QueryRowContext(ctx, "INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status) VALUES (?, ?, ?, ?, 'active') RETURNING id", uuid.New(), scheduleID, bookerID, ownerID).Scan(&bookingID)
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -523,33 +530,33 @@ func TestBookingsCancel_AsOwner(t *testing.T) {
 }
 
 func TestBookingsCancel_PastSlot(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	bookerEmail := "bookerpast@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	ownerEmail := "ownerpast@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
 	var bookingID string
-	err = pool.QueryRow(ctx,
-		`INSERT INTO bookings (schedule_id, booker_id, owner_id, status, slot_date, slot_start_time)
-		 VALUES ($1, $2, $3, 'active', '2000-01-01', '10:00:00') RETURNING id`,
-		scheduleID, bookerID, ownerID).Scan(&bookingID)
+	err = db.QueryRowContext(ctx,
+		`INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status, slot_date, slot_start_time)
+		 VALUES (?, ?, ?, ?, 'active', '2000-01-01', '10:00:00') RETURNING id`,
+		uuid.New(), scheduleID, bookerID, ownerID).Scan(&bookingID)
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -567,15 +574,15 @@ func TestBookingsCancel_PastSlot(t *testing.T) {
 }
 
 func TestBookingsCancel_NotFound(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "booker9@example.com"
-	userID := createTestUser(t, pool, email, "password123", "User")
+	userID := createTestUser(t, db, email, "password123", "User")
 	token := getAuthToken(userID, email)
 
 	rr := makeRequest(router, "DELETE", "/api/my/bookings/nonexistent-id", nil, token)
@@ -591,38 +598,38 @@ func TestBookingsCancel_NotFound(t *testing.T) {
 }
 
 func TestBookingsCancel_NotAuthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker10@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 
 	// Create owner user
 	ownerEmail := "ownercancel3@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create third user (unauthorized)
 	otherEmail := "otherbooker@example.com"
-	otherID := createTestUser(t, pool, otherEmail, "password123", "Other User")
+	otherID := createTestUser(t, db, otherEmail, "password123", "Other User")
 	otherToken := getAuthToken(otherID, otherEmail)
 
 	// Create a schedule for owner
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
 	// Create a booking
 	var bookingID string
-	err = pool.QueryRow(ctx, "INSERT INTO bookings (schedule_id, booker_id, owner_id, status) VALUES ($1, $2, $3, 'active') RETURNING id", scheduleID, bookerID, ownerID).Scan(&bookingID)
+	err = db.QueryRowContext(ctx, "INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status) VALUES (?, ?, ?, ?, 'active') RETURNING id", uuid.New(), scheduleID, bookerID, ownerID).Scan(&bookingID)
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -640,10 +647,10 @@ func TestBookingsCancel_NotAuthorized(t *testing.T) {
 }
 
 func TestBookingsCancel_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "DELETE", "/api/my/bookings/some-id", nil, "")
 
@@ -653,34 +660,34 @@ func TestBookingsCancel_Unauthorized(t *testing.T) {
 }
 
 func TestBookingsList_WithCancelled(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create booker user
 	bookerEmail := "booker11@example.com"
-	bookerID := createTestUser(t, pool, bookerEmail, "password123", "Booker User")
+	bookerID := createTestUser(t, db, bookerEmail, "password123", "Booker User")
 	bookerToken := getAuthToken(bookerID, bookerEmail)
 
 	// Create owner user
 	ownerEmail := "ownercancelled@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create a schedule for owner
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
 	// Create a cancelled booking
 	cancelledAt := time.Now()
-	_, err = pool.Exec(ctx, "INSERT INTO bookings (schedule_id, booker_id, owner_id, status, cancelled_at, cancelled_by) VALUES ($1, $2, $3, 'cancelled', $4, $2)", scheduleID, bookerID, ownerID, cancelledAt)
+	_, err = db.ExecContext(ctx, "INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status, cancelled_at, cancelled_by) VALUES (?, ?, ?, ?, 'cancelled', ?, ?)", uuid.New(), scheduleID, bookerID, ownerID, cancelledAt.Format(time.RFC3339), bookerID)
 	if err != nil {
 		t.Fatalf("failed to create cancelled booking: %v", err)
 	}

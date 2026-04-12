@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -24,21 +25,17 @@ func main() {
 
 	ctx := context.Background()
 
-	pool, err := db.NewPool(ctx)
+	sqldb, err := db.Open(ctx)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer pool.Close()
+	defer func(sqldb *sql.DB) { _ = sqldb.Close() }(sqldb)
 
-	if err := pool.Ping(ctx); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
-	}
-
-	if err := db.Migrate(ctx, pool, "migrations"); err != nil {
+	if err := db.Migrate(ctx, sqldb, "migrations"); err != nil {
 		log.Fatalf("Migrations failed (fix DATABASE_URL / permissions and restart): %v", err)
 	}
 
-	router := api.NewRouter(pool)
+	router := api.NewRouter(sqldb)
 
 	port := os.Getenv("PORT")
 	if port == "" {

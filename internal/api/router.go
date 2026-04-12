@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
@@ -24,7 +24,7 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-func NewRouter(pool *pgxpool.Pool) *chi.Mux {
+func NewRouter(sqldb *sql.DB) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware - ALL middleware must be defined before routes
@@ -52,26 +52,26 @@ func NewRouter(pool *pgxpool.Pool) *chi.Mux {
 	})
 
 	// Public routes (no JWT required)
-	r.Mount("/api/auth", authRouter(pool))
+	r.Mount("/api/auth", authRouter(sqldb))
 
 	// Protected routes (JWT required)
 	r.Route("/api", func(r chi.Router) {
 		r.Use(auth.Middleware)
-		r.Mount("/users", usersRouter(pool))
-		r.Mount("/my/schedules", schedulesRouter(pool))
-		r.Mount("/my/groups", groupsRouter(pool))
-		r.Mount("/my/bookings", bookingsRouter(pool))
+		r.Mount("/users", usersRouter(sqldb))
+		r.Mount("/my/schedules", schedulesRouter(sqldb))
+		r.Mount("/my/groups", groupsRouter(sqldb))
+		r.Mount("/my/bookings", bookingsRouter(sqldb))
 
 		// Available users for group member addition (all users except current)
 		r.Get("/my/available-users", func(w http.ResponseWriter, r *http.Request) {
-			h := &usersHandler{pool: pool}
+			h := &usersHandler{db: sqldb}
 			h.availableUsers(w, r)
 		})
 	})
 
 	// Route for current user profile updates
 	r.With(auth.Middleware).Put("/api/users/me", func(w http.ResponseWriter, r *http.Request) {
-		h := &usersHandler{pool: pool}
+		h := &usersHandler{db: sqldb}
 		h.updateMe(w, r)
 	})
 

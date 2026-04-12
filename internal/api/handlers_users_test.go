@@ -8,37 +8,38 @@ import (
 
 	"call-booking/internal/auth"
 	"call-booking/internal/models"
+	"call-booking/internal/uuid"
 )
 
 func TestUsersList_VisibleUsers(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create current user
 	currentEmail := "current@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create public user (visible via public group)
 	publicUserEmail := "public@example.com"
-	publicUserID := createTestUser(t, pool, publicUserEmail, "password123", "Public User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", publicUserID)
+	publicUserID := createTestUser(t, db, publicUserEmail, "password123", "Public User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", publicUserID)
 
 	// Create private user (not visible)
 	privateUserEmail := "private@example.com"
-	_ = createTestUser(t, pool, privateUserEmail, "password123", "Private User")
+	_ = createTestUser(t, db, privateUserEmail, "password123", "Private User")
 	// No group created, so not visible
 
 	// Create user with member group (visible via membership)
 	memberUserEmail := "member@example.com"
-	memberUserID := createTestUser(t, pool, memberUserEmail, "password123", "Member User")
+	memberUserID := createTestUser(t, db, memberUserEmail, "password123", "Member User")
 	var groupID string
-	_ = pool.QueryRow(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Work', 'work') RETURNING id", memberUserID).Scan(&groupID)
-	_, _ = pool.Exec(ctx, "INSERT INTO group_members (group_id, member_id, added_by) VALUES ($1, $2, $1)", groupID, currentUserID)
+	_ = db.QueryRowContext(ctx, "INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, 'Work', 'work') RETURNING id", uuid.New(), memberUserID).Scan(&groupID)
+	_, _ = db.ExecContext(ctx, "INSERT INTO group_members (id, group_id, member_id, added_by) VALUES (?, ?, ?, ?)", uuid.New(), groupID, currentUserID, currentUserID)
 
 	rr := makeRequest(router, "GET", "/api/users", nil, currentToken)
 
@@ -85,15 +86,15 @@ func TestUsersList_VisibleUsers(t *testing.T) {
 }
 
 func TestUsersList_EmptyWhenNoVisibleUsers(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create current user
 	currentEmail := "current2@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	rr := makeRequest(router, "GET", "/api/users", nil, currentToken)
@@ -114,10 +115,10 @@ func TestUsersList_EmptyWhenNoVisibleUsers(t *testing.T) {
 }
 
 func TestUsersList_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/users", nil, "")
 
@@ -127,22 +128,22 @@ func TestUsersList_Unauthorized(t *testing.T) {
 }
 
 func TestUsersGet_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create current user
 	currentEmail := "current3@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create public user
 	publicUserEmail := "public2@example.com"
-	publicUserID := createTestUser(t, pool, publicUserEmail, "password123", "Public User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", publicUserID)
+	publicUserID := createTestUser(t, db, publicUserEmail, "password123", "Public User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", publicUserID)
 
 	rr := makeRequest(router, "GET", "/api/users/"+publicUserID, nil, currentToken)
 
@@ -162,20 +163,20 @@ func TestUsersGet_Success(t *testing.T) {
 }
 
 func TestUsersGet_NotVisible(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create current user
 	currentEmail := "current4@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create private user (no visibility)
 	privateUserEmail := "private2@example.com"
-	privateUserID := createTestUser(t, pool, privateUserEmail, "password123", "Private User")
+	privateUserID := createTestUser(t, db, privateUserEmail, "password123", "Private User")
 
 	rr := makeRequest(router, "GET", "/api/users/"+privateUserID, nil, currentToken)
 
@@ -190,17 +191,18 @@ func TestUsersGet_NotVisible(t *testing.T) {
 }
 
 func TestUsersGet_NotFound(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create current user
 	currentEmail := "current5@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
-	rr := makeRequest(router, "GET", "/api/users/nonexistent-id", nil, currentToken)
+	missingID := uuid.New()
+	rr := makeRequest(router, "GET", "/api/users/"+missingID, nil, currentToken)
 
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("expected status 404, got %d", rr.Code)
@@ -208,10 +210,10 @@ func TestUsersGet_NotFound(t *testing.T) {
 }
 
 func TestUsersGet_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/users/some-id", nil, "")
 
@@ -221,30 +223,30 @@ func TestUsersGet_Unauthorized(t *testing.T) {
 }
 
 func TestUsersSlots_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create current user
 	currentEmail := "current6@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "owner@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create a recurring schedule for the owner
 	tomorrow := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	dayOfWeek := int32(time.Now().Add(24 * time.Hour).Weekday())
 
-	_, err := pool.Exec(ctx,
-		"INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false)",
-		ownerID, dayOfWeek)
+	_, err := db.ExecContext(ctx,
+		"INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0)",
+		uuid.New(), ownerID, dayOfWeek)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
@@ -276,22 +278,22 @@ func TestUsersSlots_Success(t *testing.T) {
 }
 
 func TestUsersSlots_MissingDate(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create current user
 	currentEmail := "current7@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "owner2@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	rr := makeRequest(router, "GET", "/api/users/"+ownerID+"/slots", nil, currentToken)
 
@@ -306,20 +308,20 @@ func TestUsersSlots_MissingDate(t *testing.T) {
 }
 
 func TestUsersSlots_NotVisible(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create current user
 	currentEmail := "current8@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create private user
 	privateEmail := "private3@example.com"
-	privateID := createTestUser(t, pool, privateEmail, "password123", "Private User")
+	privateID := createTestUser(t, db, privateEmail, "password123", "Private User")
 
 	tomorrow := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	rr := makeRequest(router, "GET", "/api/users/"+privateID+"/slots?date="+tomorrow, nil, currentToken)
@@ -330,10 +332,10 @@ func TestUsersSlots_NotVisible(t *testing.T) {
 }
 
 func TestUsersSlots_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/users/some-id/slots?date=2024-01-01", nil, "")
 
@@ -343,30 +345,30 @@ func TestUsersSlots_Unauthorized(t *testing.T) {
 }
 
 func TestUsersSlots_BlockedSchedule(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create current user
 	currentEmail := "current9@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "owner3@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create a blocked schedule
 	tomorrow := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	dayOfWeek := int32(time.Now().Add(24 * time.Hour).Weekday())
 
-	_, err := pool.Exec(ctx,
-		"INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '00:00:00', '23:59:00', true)",
-		ownerID, dayOfWeek)
+	_, err := db.ExecContext(ctx,
+		"INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '00:00:00', '23:59:00', 1)",
+		uuid.New(), ownerID, dayOfWeek)
 	if err != nil {
 		t.Fatalf("failed to create blocked schedule: %v", err)
 	}
@@ -387,39 +389,39 @@ func TestUsersSlots_BlockedSchedule(t *testing.T) {
 }
 
 func TestUsersSlots_BookedSlot(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create current user (as booker)
 	currentEmail := "booker@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Booker User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Booker User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create owner user with public visibility
 	ownerEmail := "owner4@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
-	_, _ = pool.Exec(ctx, "INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, 'Public', 'public')", ownerID)
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = 1 WHERE id = ?", ownerID)
 
 	// Create a schedule and a booking
 	tomorrow := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	dayOfWeek := int32(time.Now().Add(24 * time.Hour).Weekday())
 
 	var scheduleID string
-	err := pool.QueryRow(ctx,
-		"INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '10:00:00', false) RETURNING id",
-		ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx,
+		"INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '10:00:00', 0) RETURNING id",
+		uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to create schedule: %v", err)
 	}
 
 	// Create a booking (slot_date обязателен для фильтра getSlotsForDate)
-	_, err = pool.Exec(ctx,
-		"INSERT INTO bookings (schedule_id, booker_id, owner_id, status, slot_start_time, slot_date) VALUES ($1, $2, $3, 'active', '09:00:00', $4::date)",
-		scheduleID, currentUserID, ownerID, tomorrow)
+	_, err = db.ExecContext(ctx,
+		"INSERT INTO bookings (id, schedule_id, booker_id, owner_id, status, slot_start_time, slot_date) VALUES (?, ?, ?, ?, 'active', '09:00:00', ?)",
+		uuid.New(), scheduleID, currentUserID, ownerID, tomorrow)
 	if err != nil {
 		t.Fatalf("failed to create booking: %v", err)
 	}
@@ -453,30 +455,30 @@ func TestUsersSlots_BookedSlot(t *testing.T) {
 }
 
 func TestAvailableUsers_ReturnsAllUsers(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create current user
 	currentEmail := "current@example.com"
-	currentUserID := createTestUser(t, pool, currentEmail, "password123", "Current User")
+	currentUserID := createTestUser(t, db, currentEmail, "password123", "Current User")
 	currentToken := getAuthToken(currentUserID, currentEmail)
 
 	// Create public user
 	publicUserEmail := "public@example.com"
-	publicUserID := createTestUser(t, pool, publicUserEmail, "password123", "Public User")
-	_, _ = pool.Exec(ctx, "UPDATE users SET is_public = true WHERE id = $1", publicUserID)
+	publicUserID := createTestUser(t, db, publicUserEmail, "password123", "Public User")
+	_, _ = db.ExecContext(ctx, "UPDATE users SET is_public = true WHERE id = ?", publicUserID)
 
 	// Create private user (not public, not in any group)
 	privateUserEmail := "private@example.com"
-	_ = createTestUser(t, pool, privateUserEmail, "password123", "Private User")
+	_ = createTestUser(t, db, privateUserEmail, "password123", "Private User")
 
 	// Create another private user
 	privateUserEmail2 := "private2@example.com"
-	_ = createTestUser(t, pool, privateUserEmail2, "password123", "Private User 2")
+	_ = createTestUser(t, db, privateUserEmail2, "password123", "Private User 2")
 
 	rr := makeRequest(router, "GET", "/api/my/available-users", nil, currentToken)
 
@@ -528,10 +530,10 @@ func TestAvailableUsers_ReturnsAllUsers(t *testing.T) {
 }
 
 func TestAvailableUsers_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/my/available-users", nil, "")
 

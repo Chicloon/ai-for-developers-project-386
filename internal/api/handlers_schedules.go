@@ -1,26 +1,26 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"call-booking/internal/auth"
 	"call-booking/internal/models"
+	"call-booking/internal/uuid"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type schedulesHandler struct {
-	pool *pgxpool.Pool
+	db *sql.DB
 }
 
-func schedulesRouter(pool *pgxpool.Pool) http.Handler {
+func schedulesRouter(db *sql.DB) http.Handler {
 	r := chi.NewRouter()
-	h := &schedulesHandler{pool: pool}
+	h := &schedulesHandler{db: db}
 
 	r.Use(auth.Middleware)
 	r.Get("/", h.list)
@@ -34,16 +34,13 @@ func schedulesRouter(pool *pgxpool.Pool) http.Handler {
 func (h *schedulesHandler) list(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 
-	rows, err := h.pool.Query(r.Context(),
-		`SELECT s.id, s.user_id, s.type, s.day_of_week, s.date::text, s.start_time, s.end_time, s.is_blocked,
-			TO_CHAR(s.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-			COALESCE(
-				ARRAY_AGG(svg.group_id) FILTER (WHERE svg.group_id IS NOT NULL),
-				ARRAY[]::UUID[]
-			) as group_ids
+	rows, err := h.db.QueryContext(r.Context(),
+		`SELECT s.id, s.user_id, s.type, s.day_of_week, s.date, s.start_time, s.end_time, s.is_blocked,
+			s.created_at,
+			COALESCE(GROUP_CONCAT(svg.group_id), '') AS group_ids
 		 FROM schedules s
 		 LEFT JOIN schedule_visibility_groups svg ON svg.schedule_id = s.id
-		 WHERE s.user_id = $1
+		 WHERE s.user_id = ?
 		 GROUP BY s.id, s.user_id, s.type, s.day_of_week, s.date, s.start_time, s.end_time, s.is_blocked, s.created_at
 		 ORDER BY s.created_at DESC`,
 		userID)
@@ -57,16 +54,17 @@ func (h *schedulesHandler) list(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var s models.Schedule
 		var dayOfWeek *int32
-		var date *string
-		var groupIDs []string
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Type, &dayOfWeek, &date, &s.StartTime, &s.EndTime, &s.IsBlocked, &s.CreatedAt, &groupIDs); err != nil {
+		var date sql.NullString
+		var groupIDsRaw sql.NullString
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Type, &dayOfWeek, &date, &s.StartTime, &s.EndTime, &s.IsBlocked, &s.CreatedAt, &groupIDsRaw); err != nil {
 			jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 			return
 		}
 		s.DayOfWeek = dayOfWeek
-		s.Date = date
-		// Filter out empty UUID entries
-		s.GroupIDs = filterEmptyUUIDs(groupIDs)
+		if date.Valid {
+			s.Date = &date.String
+		}
+		s.GroupIDs = parseGroupConcat(groupIDsRaw)
 		schedules = append(schedules, s)
 	}
 
@@ -77,7 +75,7 @@ func (h *schedulesHandler) list(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]interface{}{"schedules": schedules})
 }
 
-// filterEmptyUUIDs removes empty/zero UUIDs from the array
+// filterEmptyUUIDs removes empty/zero UUIDs from the slice
 func filterEmptyUUIDs(ids []string) []string {
 	var result []string
 	emptyUUID := "00000000-0000-0000-0000-000000000000"
@@ -108,7 +106,7 @@ func (h *schedulesHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Format time to PostgreSQL TIME format (HH:MM:SS)
+	// Format time to HH:MM:SS
 	startTime := req.StartTime
 	if len(startTime) == 5 {
 		startTime = startTime + ":00"
@@ -118,65 +116,73 @@ func (h *schedulesHandler) create(w http.ResponseWriter, r *http.Request) {
 		endTime = endTime + ":00"
 	}
 
-	// Start transaction
-	tx, err := h.pool.Begin(r.Context())
+	tx, err := h.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
-	defer tx.Rollback(r.Context())
+	defer func() { _ = tx.Rollback() }()
 
 	var s models.Schedule
 	var dayOfWeek *int32
-	var date *string
+	var date sql.NullString
+	scheduleID := uuid.New()
 
-	err = tx.QueryRow(r.Context(),
-		`INSERT INTO schedules (user_id, type, day_of_week, date, start_time, end_time, is_blocked)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
-		 RETURNING id, user_id, type, day_of_week, date::text, start_time, end_time, is_blocked, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-		userID, req.Type, req.DayOfWeek, req.Date, startTime, endTime, req.IsBlocked).
+	var dow interface{}
+	if req.DayOfWeek != nil {
+		dow = int(*req.DayOfWeek)
+	}
+	var dateVal interface{}
+	if req.Date != nil {
+		dateVal = *req.Date
+	}
+
+	err = tx.QueryRowContext(r.Context(),
+		`INSERT INTO schedules (id, user_id, type, day_of_week, date, start_time, end_time, is_blocked)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 RETURNING id, user_id, type, day_of_week, date, start_time, end_time, is_blocked, created_at`,
+		scheduleID, userID, req.Type, dow, dateVal, startTime, endTime, req.IsBlocked).
 		Scan(&s.ID, &s.UserID, &s.Type, &dayOfWeek, &date, &s.StartTime, &s.EndTime, &s.IsBlocked, &s.CreatedAt)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 	s.DayOfWeek = dayOfWeek
-	s.Date = date
+	if date.Valid {
+		s.Date = &date.String
+	}
 
 	// Insert group associations if provided
 	if len(req.GroupIDs) > 0 {
 		for _, groupID := range req.GroupIDs {
-			// Verify the group belongs to the user
 			var ownerID string
-			err := tx.QueryRow(r.Context(),
-				"SELECT owner_id FROM visibility_groups WHERE id = $1",
+			err := tx.QueryRowContext(r.Context(),
+				"SELECT owner_id FROM visibility_groups WHERE id = ?",
 				groupID).Scan(&ownerID)
 			if err != nil {
-				continue // Skip invalid groups
+				continue
 			}
 			if ownerID != userID {
-				continue // Skip groups not owned by user
+				continue
 			}
 
-			_, err = tx.Exec(r.Context(),
-				"INSERT INTO schedule_visibility_groups (schedule_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-				s.ID, groupID)
+			_, err = tx.ExecContext(r.Context(),
+				`INSERT INTO schedule_visibility_groups (id, schedule_id, group_id) VALUES (?, ?, ?)
+				 ON CONFLICT(schedule_id, group_id) DO NOTHING`,
+				uuid.New(), s.ID, groupID)
 			if err != nil {
-				// Log error but continue
 				continue
 			}
 		}
 	}
 
-	// Commit transaction
-	if err := tx.Commit(r.Context()); err != nil {
+	if err := tx.Commit(); err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 
-	// Fetch the group IDs we just inserted
-	rows, err := h.pool.Query(r.Context(),
-		"SELECT group_id FROM schedule_visibility_groups WHERE schedule_id = $1",
+	rows, err := h.db.QueryContext(r.Context(),
+		"SELECT group_id FROM schedule_visibility_groups WHERE schedule_id = ?",
 		s.ID)
 	if err == nil {
 		defer rows.Close()
@@ -203,7 +209,6 @@ func (h *schedulesHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Format time to PostgreSQL TIME format (HH:MM:SS)
 	startTime := req.StartTime
 	if len(startTime) == 5 {
 		startTime = startTime + ":00"
@@ -213,26 +218,34 @@ func (h *schedulesHandler) update(w http.ResponseWriter, r *http.Request) {
 		endTime = endTime + ":00"
 	}
 
-	// Start transaction
-	tx, err := h.pool.Begin(r.Context())
+	tx, err := h.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
-	defer tx.Rollback(r.Context())
+	defer func() { _ = tx.Rollback() }()
 
 	var s models.Schedule
 	var dayOfWeek *int32
-	var date *string
+	var date sql.NullString
 
-	err = tx.QueryRow(r.Context(),
-		`UPDATE schedules SET type=$1, day_of_week=$2, date=$3, start_time=$4, end_time=$5, is_blocked=$6
-		 WHERE id=$7 AND user_id=$8
-		 RETURNING id, user_id, type, day_of_week, date::text, start_time, end_time, is_blocked, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-		req.Type, req.DayOfWeek, req.Date, startTime, endTime, req.IsBlocked, scheduleID, userID).
+	var updDow interface{}
+	if req.DayOfWeek != nil {
+		updDow = int(*req.DayOfWeek)
+	}
+	var updDate interface{}
+	if req.Date != nil {
+		updDate = *req.Date
+	}
+
+	err = tx.QueryRowContext(r.Context(),
+		`UPDATE schedules SET type=?, day_of_week=?, date=?, start_time=?, end_time=?, is_blocked=?
+		 WHERE id=? AND user_id=?
+		 RETURNING id, user_id, type, day_of_week, date, start_time, end_time, is_blocked, created_at`,
+		req.Type, updDow, updDate, startTime, endTime, req.IsBlocked, scheduleID, userID).
 		Scan(&s.ID, &s.UserID, &s.Type, &dayOfWeek, &date, &s.StartTime, &s.EndTime, &s.IsBlocked, &s.CreatedAt)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			jsonError(w, http.StatusNotFound, "schedule not found")
 			return
 		}
@@ -240,23 +253,22 @@ func (h *schedulesHandler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.DayOfWeek = dayOfWeek
-	s.Date = date
+	if date.Valid {
+		s.Date = &date.String
+	}
 
-	// Delete existing group associations
-	_, err = tx.Exec(r.Context(),
-		"DELETE FROM schedule_visibility_groups WHERE schedule_id = $1",
+	_, err = tx.ExecContext(r.Context(),
+		"DELETE FROM schedule_visibility_groups WHERE schedule_id = ?",
 		scheduleID)
 	if err != nil {
 		// Continue even if delete fails
 	}
 
-	// Insert new group associations if provided
 	if len(req.GroupIDs) > 0 {
 		for _, groupID := range req.GroupIDs {
-			// Verify the group belongs to the user
 			var ownerID string
-			err := tx.QueryRow(r.Context(),
-				"SELECT owner_id FROM visibility_groups WHERE id = $1",
+			err := tx.QueryRowContext(r.Context(),
+				"SELECT owner_id FROM visibility_groups WHERE id = ?",
 				groupID).Scan(&ownerID)
 			if err != nil {
 				continue
@@ -265,24 +277,23 @@ func (h *schedulesHandler) update(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			_, err = tx.Exec(r.Context(),
-				"INSERT INTO schedule_visibility_groups (schedule_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-				scheduleID, groupID)
+			_, err = tx.ExecContext(r.Context(),
+				`INSERT INTO schedule_visibility_groups (id, schedule_id, group_id) VALUES (?, ?, ?)
+				 ON CONFLICT(schedule_id, group_id) DO NOTHING`,
+				uuid.New(), scheduleID, groupID)
 			if err != nil {
 				continue
 			}
 		}
 	}
 
-	// Commit transaction
-	if err := tx.Commit(r.Context()); err != nil {
+	if err := tx.Commit(); err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error: "+err.Error())
 		return
 	}
 
-	// Fetch the current group IDs
-	rows, err := h.pool.Query(r.Context(),
-		"SELECT group_id FROM schedule_visibility_groups WHERE schedule_id = $1",
+	rows, err := h.db.QueryContext(r.Context(),
+		"SELECT group_id FROM schedule_visibility_groups WHERE schedule_id = ?",
 		s.ID)
 	if err == nil {
 		defer rows.Close()
@@ -303,19 +314,16 @@ func (h *schedulesHandler) delete(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 	scheduleID := chi.URLParam(r, "id")
 
-	// Group associations will be deleted by CASCADE
-	result, err := h.pool.Exec(r.Context(),
-		"DELETE FROM schedules WHERE id = $1 AND user_id = $2",
+	result, err := h.db.ExecContext(r.Context(),
+		"DELETE FROM schedules WHERE id = ? AND user_id = ?",
 		scheduleID, userID)
 	if err != nil {
-		// Check if it's a foreign key constraint violation
-		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23503" {
-			// Still delete the schedule - the associations should cascade
-			_, _ = h.pool.Exec(r.Context(),
-				"DELETE FROM schedule_visibility_groups WHERE schedule_id = $1",
+		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+			_, _ = h.db.ExecContext(r.Context(),
+				"DELETE FROM schedule_visibility_groups WHERE schedule_id = ?",
 				scheduleID)
-			result, err = h.pool.Exec(r.Context(),
-				"DELETE FROM schedules WHERE id = $1 AND user_id = $2",
+			result, err = h.db.ExecContext(r.Context(),
+				"DELETE FROM schedules WHERE id = ? AND user_id = ?",
 				scheduleID, userID)
 		}
 		if err != nil {
@@ -324,7 +332,8 @@ func (h *schedulesHandler) delete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if result.RowsAffected() == 0 {
+	n, _ := result.RowsAffected()
+	if n == 0 {
 		jsonError(w, http.StatusNotFound, "schedule not found")
 		return
 	}

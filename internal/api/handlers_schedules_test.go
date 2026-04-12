@@ -6,18 +6,19 @@ import (
 	"testing"
 
 	"call-booking/internal/models"
+	"call-booking/internal/uuid"
 )
 
 func TestSchedulesList_Empty(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "schedules@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	rr := makeRequest(router, "GET", "/api/my/schedules", nil, token)
@@ -38,24 +39,24 @@ func TestSchedulesList_Empty(t *testing.T) {
 }
 
 func TestSchedulesList_WithSchedules(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create user
 	email := "schedules2@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	// Insert test schedules
-	_, err := pool.Exec(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', 1, '09:00:00', '17:00:00', false)", userID)
+	_, err := db.ExecContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', 1, '09:00:00', '17:00:00', 0)", uuid.New(), userID)
 	if err != nil {
 		t.Fatalf("failed to insert schedule: %v", err)
 	}
-	_, err = pool.Exec(ctx, "INSERT INTO schedules (user_id, type, date, start_time, end_time, is_blocked) VALUES ($1, 'one-time', '2026-04-15', '10:00:00', '14:00:00', false)", userID)
+	_, err = db.ExecContext(ctx, "INSERT INTO schedules (id, user_id, type, date, start_time, end_time, is_blocked) VALUES (?, ?, 'one-time', '2026-04-15', '10:00:00', '14:00:00', 0)", uuid.New(), userID)
 	if err != nil {
 		t.Fatalf("failed to insert schedule: %v", err)
 	}
@@ -99,10 +100,10 @@ func TestSchedulesList_WithSchedules(t *testing.T) {
 }
 
 func TestSchedulesList_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "GET", "/api/my/schedules", nil, "")
 
@@ -112,15 +113,15 @@ func TestSchedulesList_Unauthorized(t *testing.T) {
 }
 
 func TestSchedulesCreate_Recurring(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "schedules3@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	req := models.CreateScheduleRequest{
@@ -155,15 +156,15 @@ func TestSchedulesCreate_Recurring(t *testing.T) {
 }
 
 func TestSchedulesCreate_OneTime(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "schedules4@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	date := "2026-04-20"
@@ -193,15 +194,15 @@ func TestSchedulesCreate_OneTime(t *testing.T) {
 }
 
 func TestSchedulesCreate_Blocked(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "schedules5@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	req := models.CreateScheduleRequest{
@@ -227,15 +228,15 @@ func TestSchedulesCreate_Blocked(t *testing.T) {
 }
 
 func TestSchedulesCreate_InvalidType(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "schedules6@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	req := models.CreateScheduleRequest{
@@ -258,15 +259,15 @@ func TestSchedulesCreate_InvalidType(t *testing.T) {
 }
 
 func TestSchedulesCreate_MissingTimes(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "schedules7@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	testCases := []struct {
@@ -302,10 +303,10 @@ func TestSchedulesCreate_MissingTimes(t *testing.T) {
 }
 
 func TestSchedulesCreate_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	req := models.CreateScheduleRequest{
 		Type:      "recurring",
@@ -322,22 +323,22 @@ func TestSchedulesCreate_Unauthorized(t *testing.T) {
 }
 
 func TestSchedulesUpdate_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create user
 	email := "schedules8@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	// Insert a schedule
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", userID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), userID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to insert schedule: %v", err)
 	}
@@ -371,15 +372,15 @@ func TestSchedulesUpdate_Success(t *testing.T) {
 }
 
 func TestSchedulesUpdate_NotFound(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "schedules9@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	req := models.CreateScheduleRequest{
@@ -402,25 +403,25 @@ func TestSchedulesUpdate_NotFound(t *testing.T) {
 }
 
 func TestSchedulesUpdate_NotOwner(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create two users
 	ownerEmail := "owner@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
 
 	otherEmail := "other@example.com"
-	otherID := createTestUser(t, pool, otherEmail, "password123", "Other User")
+	otherID := createTestUser(t, db, otherEmail, "password123", "Other User")
 	otherToken := getAuthToken(otherID, otherEmail)
 
 	// Insert a schedule for owner
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to insert schedule: %v", err)
 	}
@@ -440,22 +441,22 @@ func TestSchedulesUpdate_NotOwner(t *testing.T) {
 }
 
 func TestSchedulesDelete_Success(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create user
 	email := "schedules10@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	// Insert a schedule
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", userID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), userID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to insert schedule: %v", err)
 	}
@@ -468,15 +469,15 @@ func TestSchedulesDelete_Success(t *testing.T) {
 }
 
 func TestSchedulesDelete_NotFound(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	// Create user
 	email := "schedules11@example.com"
-	userID := createTestUser(t, pool, email, "password123", "Schedules Test User")
+	userID := createTestUser(t, db, email, "password123", "Schedules Test User")
 	token := getAuthToken(userID, email)
 
 	rr := makeRequest(router, "DELETE", "/api/my/schedules/nonexistent-id", nil, token)
@@ -492,25 +493,25 @@ func TestSchedulesDelete_NotFound(t *testing.T) {
 }
 
 func TestSchedulesDelete_NotOwner(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
-	defer cleanupTestData(t, pool)
+	db := setupTestDB(t)
+	defer db.Close()
+	defer cleanupTestData(t, db)
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 	ctx := context.Background()
 
 	// Create two users
 	ownerEmail := "owner2@example.com"
-	ownerID := createTestUser(t, pool, ownerEmail, "password123", "Owner User")
+	ownerID := createTestUser(t, db, ownerEmail, "password123", "Owner User")
 
 	otherEmail := "other2@example.com"
-	otherID := createTestUser(t, pool, otherEmail, "password123", "Other User")
+	otherID := createTestUser(t, db, otherEmail, "password123", "Other User")
 	otherToken := getAuthToken(otherID, otherEmail)
 
 	// Insert a schedule for owner
 	var scheduleID string
 	dayOfWeek := int32(1)
-	err := pool.QueryRow(ctx, "INSERT INTO schedules (user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES ($1, 'recurring', $2, '09:00:00', '17:00:00', false) RETURNING id", ownerID, dayOfWeek).Scan(&scheduleID)
+	err := db.QueryRowContext(ctx, "INSERT INTO schedules (id, user_id, type, day_of_week, start_time, end_time, is_blocked) VALUES (?, ?, 'recurring', ?, '09:00:00', '17:00:00', 0) RETURNING id", uuid.New(), ownerID, dayOfWeek).Scan(&scheduleID)
 	if err != nil {
 		t.Fatalf("failed to insert schedule: %v", err)
 	}
@@ -523,10 +524,10 @@ func TestSchedulesDelete_NotOwner(t *testing.T) {
 }
 
 func TestSchedulesDelete_Unauthorized(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	db := setupTestDB(t)
+	defer db.Close()
 
-	router := NewRouter(pool)
+	router := NewRouter(db)
 
 	rr := makeRequest(router, "DELETE", "/api/my/schedules/some-id", nil, "")
 

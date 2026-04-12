@@ -1,25 +1,27 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"call-booking/internal/auth"
 	"call-booking/internal/models"
+	"call-booking/internal/uuid"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type groupsHandler struct {
-	pool *pgxpool.Pool
+	db *sql.DB
 }
 
-func groupsRouter(pool *pgxpool.Pool) http.Handler {
+func groupsRouter(db *sql.DB) http.Handler {
 	r := chi.NewRouter()
-	h := &groupsHandler{pool: pool}
+	h := &groupsHandler{db: db}
 
 	r.Use(auth.Middleware)
 	r.Get("/", h.list)
@@ -33,15 +35,13 @@ func groupsRouter(pool *pgxpool.Pool) http.Handler {
 }
 
 // list returns all fixed groups owned by the current user
-// Groups are auto-created on registration: Family, Work, Friends
-// If groups don't exist (legacy users), they are created on-demand
 func (h *groupsHandler) list(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 
-	rows, err := h.pool.Query(r.Context(),
-		`SELECT id, owner_id, name, visibility_level, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+	rows, err := h.db.QueryContext(r.Context(),
+		`SELECT id, owner_id, name, visibility_level, strftime('%Y-%m-%dT%H:%M:%SZ', created_at)
 		 FROM visibility_groups
-		 WHERE owner_id = $1
+		 WHERE owner_id = ?
 		 ORDER BY
 		   CASE visibility_level
 		     WHEN 'family' THEN 1
@@ -65,7 +65,6 @@ func (h *groupsHandler) list(w http.ResponseWriter, r *http.Request) {
 		groups = append(groups, g)
 	}
 
-	// Auto-create missing groups for legacy users (registered before auto-creation logic)
 	if len(groups) == 0 {
 		groupNames := map[string]string{
 			"family":  "Семья",
@@ -73,19 +72,18 @@ func (h *groupsHandler) list(w http.ResponseWriter, r *http.Request) {
 			"friends": "Друзья",
 		}
 		for level, name := range groupNames {
-			_, err := h.pool.Exec(r.Context(),
-				"INSERT INTO visibility_groups (owner_id, name, visibility_level) VALUES ($1, $2, $3)",
-				userID, name, level)
+			_, err := h.db.ExecContext(r.Context(),
+				`INSERT INTO visibility_groups (id, owner_id, name, visibility_level) VALUES (?, ?, ?, ?)`,
+				uuid.New(), userID, name, level)
 			if err != nil {
 				log.Printf("Failed to create %s group for user %s: %v", level, userID, err)
 			}
 		}
 
-		// Re-query to get the newly created groups
-		rows, err = h.pool.Query(r.Context(),
-			`SELECT id, owner_id, name, visibility_level, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		rows, err = h.db.QueryContext(r.Context(),
+			`SELECT id, owner_id, name, visibility_level, strftime('%Y-%m-%dT%H:%M:%SZ', created_at)
 			 FROM visibility_groups
-			 WHERE owner_id = $1
+			 WHERE owner_id = ?
 			 ORDER BY
 			   CASE visibility_level
 			     WHEN 'family' THEN 1
@@ -121,13 +119,12 @@ func (h *groupsHandler) listMembers(w http.ResponseWriter, r *http.Request) {
 	userID := auth.GetUserID(r.Context())
 	groupID := chi.URLParam(r, "id")
 
-	// Verify ownership first
 	var ownerID string
-	err := h.pool.QueryRow(r.Context(),
-		"SELECT owner_id FROM visibility_groups WHERE id = $1",
+	err := h.db.QueryRowContext(r.Context(),
+		"SELECT owner_id FROM visibility_groups WHERE id = ?",
 		groupID).Scan(&ownerID)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			jsonError(w, http.StatusNotFound, "group not found")
 			return
 		}
@@ -140,13 +137,12 @@ func (h *groupsHandler) listMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get members with user info
-	rows, err := h.pool.Query(r.Context(),
-		`SELECT gm.id, gm.group_id, gm.added_by, TO_CHAR(gm.added_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-			 u.id, u.email, u.name, u.is_public, TO_CHAR(u.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+	rows, err := h.db.QueryContext(r.Context(),
+		`SELECT gm.id, gm.group_id, gm.added_by, strftime('%Y-%m-%dT%H:%M:%SZ', gm.added_at),
+			 u.id, u.email, u.name, u.is_public, strftime('%Y-%m-%dT%H:%M:%SZ', u.created_at)
 		 FROM group_members gm
 		 JOIN users u ON gm.member_id = u.id
-		 WHERE gm.group_id = $1
+		 WHERE gm.group_id = ?
 		 ORDER BY gm.added_at DESC`,
 		groupID)
 	if err != nil {
@@ -186,13 +182,12 @@ func (h *groupsHandler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify ownership first
 	var ownerID string
-	err := h.pool.QueryRow(r.Context(),
-		"SELECT owner_id FROM visibility_groups WHERE id = $1",
+	err := h.db.QueryRowContext(r.Context(),
+		"SELECT owner_id FROM visibility_groups WHERE id = ?",
 		groupID).Scan(&ownerID)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			jsonError(w, http.StatusNotFound, "group not found")
 			return
 		}
@@ -205,15 +200,13 @@ func (h *groupsHandler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find member to add by email or userId
 	var memberID string
 	if req.UserID != nil && *req.UserID != "" {
-		// Verify user exists
-		err = h.pool.QueryRow(r.Context(),
-			"SELECT id FROM users WHERE id = $1",
+		err = h.db.QueryRowContext(r.Context(),
+			"SELECT id FROM users WHERE id = ?",
 			*req.UserID).Scan(&memberID)
 		if err != nil {
-			if err == pgx.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				jsonError(w, http.StatusNotFound, "user not found")
 				return
 			}
@@ -221,12 +214,11 @@ func (h *groupsHandler) addMember(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if req.Email != nil && *req.Email != "" {
-		// Find user by email
-		err = h.pool.QueryRow(r.Context(),
-			"SELECT id FROM users WHERE email = $1",
+		err = h.db.QueryRowContext(r.Context(),
+			"SELECT id FROM users WHERE email = ?",
 			*req.Email).Scan(&memberID)
 		if err != nil {
-			if err == pgx.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				jsonError(w, http.StatusNotFound, "user not found")
 				return
 			}
@@ -238,23 +230,20 @@ func (h *groupsHandler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cannot add owner as member
 	if memberID == ownerID {
 		jsonError(w, http.StatusBadRequest, "owner cannot be added as a member")
 		return
 	}
 
-	// Insert member
 	var m models.GroupMember
 	var user models.User
-	err = h.pool.QueryRow(r.Context(),
-		`INSERT INTO group_members (group_id, member_id, added_by) VALUES ($1, $2, $3)
-		 RETURNING id, group_id, added_by, TO_CHAR(added_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-		groupID, memberID, userID).
+	err = h.db.QueryRowContext(r.Context(),
+		`INSERT INTO group_members (id, group_id, member_id, added_by) VALUES (?, ?, ?, ?)
+		 RETURNING id, group_id, added_by, strftime('%Y-%m-%dT%H:%M:%SZ', added_at)`,
+		uuid.New(), groupID, memberID, userID).
 		Scan(&m.ID, &m.GroupID, &m.AddedBy, &m.AddedAt)
 	if err != nil {
-		// Check for unique constraint violation
-		if err.Error() == "ERROR: duplicate key value violates unique constraint \"group_members_group_id_member_id_key\" (SQLSTATE 23505)" {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			jsonError(w, http.StatusConflict, "user is already a member of this group")
 			return
 		}
@@ -262,9 +251,8 @@ func (h *groupsHandler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user info
-	err = h.pool.QueryRow(r.Context(),
-		"SELECT id, email, name, is_public, TO_CHAR(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM users WHERE id = $1",
+	err = h.db.QueryRowContext(r.Context(),
+		`SELECT id, email, name, is_public, strftime('%Y-%m-%dT%H:%M:%SZ', created_at) FROM users WHERE id = ?`,
 		memberID).Scan(&user.ID, &user.Email, &user.Name, &user.IsPublic, &user.CreatedAt)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error")
@@ -281,13 +269,12 @@ func (h *groupsHandler) removeMember(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "id")
 	memberID := chi.URLParam(r, "memberId")
 
-	// Verify ownership first
 	var ownerID string
-	err := h.pool.QueryRow(r.Context(),
-		"SELECT owner_id FROM visibility_groups WHERE id = $1",
+	err := h.db.QueryRowContext(r.Context(),
+		"SELECT owner_id FROM visibility_groups WHERE id = ?",
 		groupID).Scan(&ownerID)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			jsonError(w, http.StatusNotFound, "group not found")
 			return
 		}
@@ -300,15 +287,16 @@ func (h *groupsHandler) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.pool.Exec(r.Context(),
-		"DELETE FROM group_members WHERE id = $1 AND group_id = $2",
+	result, err := h.db.ExecContext(r.Context(),
+		"DELETE FROM group_members WHERE id = ? AND group_id = ?",
 		memberID, groupID)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
-	if result.RowsAffected() == 0 {
+	n, _ := result.RowsAffected()
+	if n == 0 {
 		jsonError(w, http.StatusNotFound, "member not found")
 		return
 	}
